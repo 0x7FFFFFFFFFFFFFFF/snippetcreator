@@ -1,9 +1,9 @@
 {
     "name": "snippetcreator",
-    "displayName": "snippetcreator",
+    "displayName": "Snippet Creator",
     "description": "",
     "publisher": "i-am-0x7FFFFFFFFFFFFFFF",
-    "version": "0.0.3",
+    "version": "0.0.4",
     "engines": {
         "vscode": "^1.62.0"
     },
