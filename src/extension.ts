@@ -1,6 +1,7 @@
 // The module 'vscode' contains the VS Code extensibility API
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
+const parser = require('./parser');
 
 const fs = require('fs');
 const path = require('path');
@@ -255,45 +256,13 @@ export function activate(context: vscode.ExtensionContext) {
         }
 
         let text = editor.document.getText();
+        let parse_result = parser.parse(text);
 
-        
         // const text_range = new vscode.Range(editor.document.positionAt(0), editor.document.positionAt(text.length - 1));
-        let snippet_name:any;
-
-        let o = my_split(text);
-        let line = o.line;
-        let other = o.other;
-        snippet_name = ((/^Name:\s*(.*)+$/im).exec(line))![1];
-
-        o = my_split(other);
-        line = o.line;
-        other = o.other;
-        let snippet_scope_line_text:any, snippet_scope:any, snippet_prefix:any = null;
-        try {
-            snippet_scope_line_text = ((/^Scope:\s*(.*)+$/im).exec(line))![1];
-            snippet_scope = snippet_scope_line_text.split(/\s*,\s*/)[0];
-        } catch {
-            snippet_scope_line_text = snippet_scope = "";
-            try {
-                snippet_prefix = ((/^Prefix:\s*(.*)+$/im).exec(line))![1];
-            } catch {
-                snippet_prefix = null;
-            }
-        }
-
-        if (snippet_prefix === null) {
-            o = my_split(other);
-            line = o.line;
-            other = o.other;
-        }
-
-        snippet_prefix = ((/^Prefix:\s*(.*)+$/im).exec(line))![1];
-        // Break it into parts
-        snippet_prefix = snippet_prefix.split(/\s*,\s*/g);
-
-        o = my_split(other);
-        line = o.line;
-        let snippet_body = o.other;
+        let snippet_name:any = parse_result[0];
+        let snippet_scope:any = parse_result[1];
+        let snippet_prefix:any = parse_result[2];
+        let snippet_body:any = parse_result[3];
 
         let st = settings();
         let newline = st.newline;
@@ -312,7 +281,7 @@ export function activate(context: vscode.ExtensionContext) {
         let snippet_object:{[k: string]: any} = {};
         snippet_object[snippet_name] = {};
         snippet_object[snippet_name]["scope"] = snippet_scope;
-        snippet_object[snippet_name]["prefix"] = snippet_prefix;
+        snippet_object[snippet_name]["prefix"] = snippet_prefix.split(/\s*,\s*/g); // Break into parts
         snippet_object[snippet_name]["body"] = [snippet_body];
         snippet_object[snippet_name]["description"] = snippet_name;
 
@@ -320,7 +289,7 @@ export function activate(context: vscode.ExtensionContext) {
 
         text = snippet_json_string + newline + newline + "// " + text.replace(/\n/g, "\n// ");
 
-        let snippet_file_name = "[" + snippet_prefix.join(", ") + " - " + snippet_name + "].code-snippets";
+        let snippet_file_name = "[" + snippet_prefix + " - " + snippet_name + "].code-snippets";
         if (snippet_scope != "") {
             snippet_file_name = snippet_scope + "." + snippet_file_name;
         }

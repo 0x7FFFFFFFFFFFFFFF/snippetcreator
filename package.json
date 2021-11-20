@@ -2,6 +2,7 @@
     "name": "snippetcreator",
     "displayName": "snippetcreator",
     "description": "",
+    "publisher": "i-am-0x7FFFFFFFFFFFFFFF",
     "version": "0.0.1",
     "engines": {
         "vscode": "^1.62.0"
