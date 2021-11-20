@@ -1,0 +1,18 @@
+snippet
+  = name scope prefix body
+name
+  = sp "//"? sp "Name"i sp ":" sp @$not_nl nl
+scope
+  = (sp "//"? sp "Scope"i sp ":" sp @$not_nl nl)?
+prefix
+  = sp "//"? sp "Prefix"i sp ":" sp @$not_nl nl
+body
+  = sep @$.+
+sep
+  = sp "//"? sp "-"+ sp nl
+nl "newline"
+  = "\r\n" / "\n"
+not_nl
+  = [^\r\n]+
+sp "whitespace"
+  = [ \t]*

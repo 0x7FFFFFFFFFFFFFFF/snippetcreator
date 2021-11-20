@@ -3,7 +3,7 @@
     "displayName": "snippetcreator",
     "description": "",
     "publisher": "i-am-0x7FFFFFFFFFFFFFFF",
-    "version": "0.0.1",
+    "version": "0.0.2",
     "engines": {
         "vscode": "^1.62.0"
     },
@@ -36,27 +36,27 @@
         "commands": [
             {
                 "command": "snippetcreator.replaceWithTabStopSyntax",
-                "title": "Edde: Replace selection with tab stop syntax like ${10:name}",
+                "title": "Replace selection with tab stop syntax like ${10:name}",
                 "category": "SnippetCreator"
             },
             {
                 "command": "snippetcreator.replaceWithTabStopChoiceSyntax",
-                "title": "Edde: Replace selection with choice tab stop syntax like ${10|Edde,rocks|}",
+                "title": "Replace selection with choice tab stop syntax like ${10|Edde,rocks|}",
                 "category": "SnippetCreator"
             },
             {
                 "command": "snippetcreator.resetTabStopCounter",
-                "title": "Edde: Reset tab stop counter to 10",
+                "title": "Reset tab stop counter to 10",
                 "category": "SnippetCreator"
             },
             {
                 "command": "snippetcreator.escapeSpecialSnippetCharacters",
-                "title": "Edde: Escape special snippet characters",
+                "title": "Escape special snippet characters",
                 "category": "SnippetCreator"
             },
             {
                 "command": "snippetcreator.saveAsSnippet",
-                "title": "Edde: Save current file as a snippet",
+                "title": "Save current file as a snippet",
                 "category": "SnippetCreator"
             }
         ],
