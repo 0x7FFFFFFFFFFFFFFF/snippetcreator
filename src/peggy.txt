@@ -1,18 +1,31 @@
 snippet
   = name scope prefix body
+
+// $: If the match succeeds, return the matched text instead of the match result.
+// Here we are matching a series of stuff. We only need the @ decorated items.
+// We only have one @ item. If multiple, an array will be returned.
 name
   = sp "//"? sp "Name"i sp ":" sp @$not_nl nl
+
 scope
   = (sp "//"? sp "Scope"i sp ":" sp @$not_nl nl)?
+
 prefix
   = sp "//"? sp "Prefix"i sp ":" sp @$not_nl nl
+
 body
   = sep @$.+
+
 sep
   = sp "//"? sp "-"+ sp nl
+
+// / means or
 nl "newline"
   = "\r\n" / "\n"
+
 not_nl
   = [^\r\n]+
+
+// Note we match multiple space here
 sp "whitespace"
   = [ \t]*
