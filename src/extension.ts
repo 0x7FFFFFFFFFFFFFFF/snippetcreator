@@ -7,23 +7,6 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-function my_split(text: string) {
-    let rn_index = text.indexOf("\r\n");
-    let n_index = text.indexOf("\n");
-
-    let result;
-
-    if (rn_index > -1) {
-        result = { "line": text.substring(0, rn_index), "other": text.substring(rn_index + 2) };
-    }
-    else if (rn_index == -1 && n_index > -1) {
-        result = { "line": text.substring(0, n_index), "other": text.substring(n_index + 1) };
-    } else {
-        result = { "line": text, "other": "" };
-    }
-    return result;
-}
-
 /** Function that count occurrences of a substring in a string;
  * @param {String} string               The string
  * @param {String} subString            The sub string to search for
@@ -280,7 +263,7 @@ export function activate(context: vscode.ExtensionContext) {
 
         let snippet_object:{[k: string]: any} = {};
         snippet_object[snippet_name] = {};
-        snippet_object[snippet_name]["scope"] = snippet_scope;
+        snippet_object[snippet_name]["scope"] = (snippet_scope || "");
         snippet_object[snippet_name]["prefix"] = snippet_prefix.split(/\s*,\s*/g); // Break into parts
         snippet_object[snippet_name]["body"] = [snippet_body];
         snippet_object[snippet_name]["description"] = snippet_name;
@@ -290,7 +273,7 @@ export function activate(context: vscode.ExtensionContext) {
         text = snippet_json_string + newline + newline + "// " + text.replace(/\n/g, "\n// ");
 
         let snippet_file_name = "[" + snippet_prefix + " - " + snippet_name + "].code-snippets";
-        if (snippet_scope != "") {
+        if (snippet_scope) {
             snippet_file_name = snippet_scope + "." + snippet_file_name;
         }
 
