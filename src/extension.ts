@@ -16,7 +16,7 @@ const os = require('os');
  * @see Unit Test https://jsfiddle.net/Victornpb/5axuh96u/
  * @see http://stackoverflow.com/questions/4009756/how-to-count-string-occurrence-in-string/7924240#7924240
  */
- function occurrences(string:any, subString:any, allowOverlapping:boolean) {
+function occurrences(string: any, subString: any, allowOverlapping: boolean) {
 
     string += "";
     subString += "";
@@ -32,8 +32,7 @@ const os = require('os');
             ++n;
             pos += step;
         }
-        else
-        {
+        else {
             break;
         }
     }
@@ -43,16 +42,16 @@ const os = require('os');
 function settings() {
     switch (os.type()) {
         case ("Darwin"): {
-            return {"newline": "\n", "user_directory": process.env.HOME + "/Library/Application Support/Code/User/"};
+            return { "newline": "\n", "user_directory": process.env.HOME + "/Library/Application Support/Code/User/" };
         }
         case ("Linux"): {
-            return {"newline": "\n", "user_directory": process.env.HOME + "/.config/Code/User/"};
+            return { "newline": "\n", "user_directory": process.env.HOME + "/.config/Code/User/" };
         }
         case ("Windows_NT"): {
-            return {"newline": "\r\n", "user_directory": process.env.APPDATA + "\\Code\\User\\"};
+            return { "newline": "\r\n", "user_directory": process.env.APPDATA + "\\Code\\User\\" };
         }
         default: {
-            return {"newline": "\n", "user_directory": process.env.HOME + "/.config/Code/User/"};
+            return { "newline": "\n", "user_directory": process.env.HOME + "/.config/Code/User/" };
         }
     }
 }
@@ -110,7 +109,7 @@ export function activate(context: vscode.ExtensionContext) {
 
         // Get selected text
         let selection = editor.selection;
-        let text:any = editor.document.getText(selection);
+        let text: any = editor.document.getText(selection);
 
         //${120|╔════════╗,║ header ║,╚════════╝,ite\,\,m 1,item\, 3|}
 
@@ -120,7 +119,7 @@ export function activate(context: vscode.ExtensionContext) {
             text = text.replace(/^\$\{\d+\||\|\}$/g, "")
 
             const regex = /(?=.)([^,\\]*(?:\\.[^,\\]*)*)(?:,|$)/gm;
-            let m, splited_text:any = [], splited_text2:any = [];
+            let m, splited_text: any = [], splited_text2: any = [];
 
             while ((m = regex.exec(text)) !== null) {
                 splited_text.push(m[1]);
@@ -149,10 +148,10 @@ export function activate(context: vscode.ExtensionContext) {
         else {
             // We are creating a choice tabstop
             // Support multi-line choices
-            if(!selection.isSingleLine) {
+            if (!selection.isSingleLine) {
                 var i, j, len, r;
 
-                text = (function() {
+                text = (function () {
                     var j, len, ref, results;
                     ref = text.split(/\r?\n/);
                     results = [];
@@ -170,7 +169,7 @@ export function activate(context: vscode.ExtensionContext) {
                     }
                 }
 
-                text = text.filter(function(s:any) {
+                text = text.filter(function (s: any) {
                     return !/^\^{3,}$/.test(s);
                 });
                 text = text.join(",");
@@ -242,16 +241,16 @@ export function activate(context: vscode.ExtensionContext) {
         let parse_result = parser.parse(text);
 
         // const text_range = new vscode.Range(editor.document.positionAt(0), editor.document.positionAt(text.length - 1));
-        let snippet_name:any = parse_result[0];
-        let snippet_scope:any = parse_result[1];
-        let snippet_prefix:any = parse_result[2];
-        let snippet_body:any = parse_result[3];
+        let snippet_name: any = parse_result[0];
+        let snippet_scope: any = parse_result[1];
+        let snippet_prefix: any = parse_result[2];
+        let snippet_body: any = parse_result[3];
 
         let st = settings();
         let newline = st.newline;
         let user_directory = st.user_directory;
 
-        let snippet_folder:any;
+        let snippet_folder: any;
         let portable_data_path = process.env['VSCODE_PORTABLE'];
         if (portable_data_path && fs.existsSync(portable_data_path)) {
             // If in portable mode
@@ -261,7 +260,7 @@ export function activate(context: vscode.ExtensionContext) {
             snippet_folder = path.join(user_directory, "snippets");
         }
 
-        let snippet_object:{[k: string]: any} = {};
+        let snippet_object: { [k: string]: any } = {};
         snippet_object[snippet_name] = {};
         snippet_object[snippet_name]["scope"] = (snippet_scope || "");
         snippet_object[snippet_name]["prefix"] = snippet_prefix.split(/\s*,\s*/g); // Break into parts
@@ -273,20 +272,29 @@ export function activate(context: vscode.ExtensionContext) {
         text = snippet_json_string + newline + newline + "// " + text.replace(/\n/g, "\n// ");
 
         let snippet_file_name = "[" + snippet_prefix + " - " + snippet_name + "].code-snippets";
-        if (snippet_scope) {
-            snippet_file_name = snippet_scope + "." + snippet_file_name;
+        if (snippet_scope && snippet_scope.trim().length > 0) {
+            // We have potentially multiple scope for the snippet
+            snippet_scope.split(/\s*,\s*/g).forEach(function (x: any) {
+                writeToFile(snippet_folder, x + "." + snippet_file_name, text);
+            });
+        }
+        else {
+            // We don't have scope
+            // snippet_file_name = snippet_scope + "." + snippet_file_name;
+            writeToFile(snippet_folder, snippet_file_name, text);
         }
 
-        // Remove invalid file name characters
-        snippet_file_name = snippet_file_name.replace(/[/\\?%*:|"<>]/g, "").replace(/\s{2,}/g, " ");
-
-        var writeStream = fs.createWriteStream(path.join(snippet_folder, snippet_file_name));
-        writeStream.write(text);
-        writeStream.end();
-
-        vscode.window.showInformationMessage(snippet_file_name + " created!");
 
     }));
+}
+
+function writeToFile(folder: any, filename: any, content: any) {
+    // Remove invalid file name characters
+    filename = filename.replace(/[/\\?%*:|"<>]/g, "").replace(/\s{2,}/g, " ");
+    var writeStream = fs.createWriteStream(path.join(folder, filename));
+    writeStream.write(content);
+    writeStream.end();
+    vscode.window.showInformationMessage(filename + " created!");
 }
 
 // this method is called when your extension is deactivated
