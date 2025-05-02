@@ -57,6 +57,36 @@
                 "command": "snippetcreator.alignByRegex",
                 "title": "Align by Regular Expression",
                 "category": "SnippetCreator"
+            },
+            {
+                "command": "snippetcreator.createReplaceOperation",
+                "title": "Create Replace Operation",
+                "category": "SnippetCreator"
+            },
+            {
+                "command": "snippetcreator.runReplaceOperation",
+                "title": "Run Replace Operation",
+                "category": "SnippetCreator"
+            },
+            {
+                "command": "snippetcreator.editReplaceOperation",
+                "title": "Edit Replace Operation",
+                "category": "SnippetCreator"
+            },
+            {
+                "command": "snippetcreator.listReplaceOperations",
+                "title": "List Replace Operations",
+                "category": "SnippetCreator"
+            },
+            {
+                "command": "snippetcreator.quickReplaceOperation",
+                "title": "Quick Replace Operation",
+                "category": "SnippetCreator"
+            },
+            {
+                "command": "snippetcreator.deleteReplaceOperation",
+                "title": "Delete Replace Operation",
+                "category": "SnippetCreator"
             }
         ],
         "keybindings": [
