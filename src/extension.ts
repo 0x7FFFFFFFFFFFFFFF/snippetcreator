@@ -7,6 +7,161 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
+enum PartType {
+    Regex,
+    Text,
+}
+
+interface Part {
+    type: PartType;
+    value: string;
+}
+
+interface Line {
+    number: number;
+    parts: Part[];
+}
+
+function trimStart(value: string): string {
+    return value.replace(/^\s+([^\s].*)/, '$1');
+}
+
+function trimStartButOne(value: string): string {
+    return value.replace(/^\s+([^\s].*)/, ' $1');
+}
+
+function trimEnd(value: string): string {
+    return value.replace(/(.*[^\s])\s+$/, '$1');
+}
+
+function trimEndButOne(value: string): string {
+    return value.replace(/(.*[^\s])\s+$/, '$1 ');
+}
+
+function trimButOne(value: string): string {
+    let result: string = value;
+    result = trimStartButOne(result);
+    result = trimEndButOne(result);
+    return result;
+}
+
+function extendToLength(value: string, length: number, tabSize: number): string {
+    return value + ' '.repeat(Math.max(0, length - tabAwareLength(value, tabSize)));
+}
+
+function tabAwareLength(value: string, tabSize: number): number {
+    var length = 0;
+    for (let idx = 0; idx < value.length; ++idx) {
+        length += value.charAt(idx) === "\t" ? tabSize : 1;
+    }
+    return length;
+}
+
+function checkedRegex(input: string): RegExp | undefined {
+    try {
+        return new RegExp(input, 'g');
+    } catch (e) {
+        return undefined;
+    }
+}
+
+class Block {
+    lines: Line[] = [];
+
+    constructor(text: string, input: string, startLine: number, eol: vscode.EndOfLine) {
+        let splitString: string;
+        if (eol === vscode.EndOfLine.CRLF) {
+            splitString = '\r\n';
+        } else {
+            splitString = '\n';
+        }
+        let textLines = text.split(splitString);
+        let regex = checkedRegex(input);
+
+        /* basic protection from bad regexes */
+        if (regex !== undefined) {
+            for (let i = 0; i < textLines.length; i++) {
+                let lineText = textLines[i];
+                let lineObject = { number: startLine + i, parts: [] as Part[] };
+
+                /* get all matches at once */
+                let textStartPosition = 0;
+                let result;
+                while (result = regex.exec(lineText)) {
+                    let matchedSep = result[0];
+                    if (matchedSep === "") {
+                        /* if the regex return 0 length matches, e.g. the '|' operator, stop pushing line objects */
+                        break;
+                    }
+                    let regexStartPosition = regex.lastIndex - matchedSep.length;
+                    lineObject.parts.push({ type: PartType.Text, value: lineText.substring(textStartPosition, regexStartPosition) });
+                    lineObject.parts.push({ type: PartType.Regex, value: matchedSep });
+                    textStartPosition = regex.lastIndex;
+                }
+                lineObject.parts.push({ type: PartType.Text, value: lineText.substring(textStartPosition, lineText.length) });
+                this.lines.push(lineObject);
+            }
+        }
+    }
+
+    trim(): Block {
+        for (let line of this.lines) {
+            for (let i = 0; i < line.parts.length; i++) {
+                let part = line.parts[i];
+                if (i === 0) {
+                    part.value = trimEndButOne(part.value);
+                } else if (i < line.parts.length - 1) {
+                    part.value = trimButOne(part.value);
+                } else {
+                    let intermediate = trimStartButOne(part.value);
+                    part.value = trimEnd(intermediate);
+                }
+            }
+        }
+        return this;
+    }
+
+    align(): Block {
+        /* get editor tab size */
+        let tabSize: number | undefined = vscode.workspace.getConfiguration('editor', null).get('tabSize');
+
+        /* check that we actually got a valid tab size and that it isn't set to a value < 1. */
+        if (tabSize === undefined || tabSize < 1) {
+            /* give helpful error message on console */
+            console.log('Error [Align by Regex]: Invalid tab size setting "editor.tabSize" for alignment.');
+
+            /* assume tab size == 1 if tab size is missing */
+            tabSize = 1;
+        }
+
+        /* get maximum number of parts */
+        let maxNrParts: number = 1;
+        for (let idx = 0; idx < this.lines.length; ++idx) {
+            let len = this.lines[idx].parts.length;
+            if (len > maxNrParts) {
+                maxNrParts = len;
+            }
+        }
+
+        /* create array with the right size and initialize array with 0 */
+        let maxLength: number[] = Array(maxNrParts).fill(0);
+        for (let line of this.lines) {
+            // no match, only one part => ignore line in max length calculation
+            if (line.parts.length > 1) {
+                for (let i = 0; i < line.parts.length; i++) {
+                    maxLength[i] = Math.max(maxLength[i], tabAwareLength(line.parts[i].value, tabSize));
+                }
+            }
+        }
+        for (let line of this.lines) {
+            for (let i = 0; i < line.parts.length - 1; i++) {
+                line.parts[i].value = extendToLength(line.parts[i].value, maxLength[i], tabSize);
+            }
+        }
+        return this;
+    }
+}
+
 /** Function that count occurrences of a substring in a string;
  * @param {String} string               The string
  * @param {String} subString            The sub string to search for
@@ -67,15 +222,6 @@ export function activate(context: vscode.ExtensionContext) {
         if (!editor) {
             return;
         }
-
-        console.log("fuck you");
-
-        // const selections: vscode.Selection[] = editor.selections;
-        // editor.edit(builder => {
-        //     for (const selection of selections) {
-        //         builder.replace(selection, 'test');
-        //     }
-        // });
 
         // Get the counter to be used in current tab stop
         let counter = context.globalState.get("counter", 10);
@@ -283,8 +429,100 @@ export function activate(context: vscode.ExtensionContext) {
             // snippet_file_name = snippet_scope + "." + snippet_file_name;
             writeToFile(snippet_folder, snippet_file_name, text);
         }
+    }));
 
 
+    context.subscriptions.push(vscode.commands.registerCommand('snippetcreator.alignByRegex', async () => {
+        let editor = vscode.window.activeTextEditor;
+        if (!editor) {
+            return;
+        }
+
+        let input = await vscode.window.showInputBox({ 
+            prompt: 'Enter regular expression(s)', 
+            placeHolder: 'e.g. :{]= (first align by : then by =)'
+        });
+        
+        if (input !== undefined && input.length > 0) {
+            let selection: vscode.Selection = editor.selection;
+            if (!selection.isEmpty) {
+                let textDocument = editor.document;
+                
+                // Don't select last line, if no character of line is selected.
+                let endLine = selection.end.line;
+                let endPosition = selection.end;
+                if (endPosition.character === 0) {
+                    endLine--;
+                }
+                
+                let range = new vscode.Range(
+                    new vscode.Position(selection.start.line, 0), 
+                    new vscode.Position(endLine, textDocument.lineAt(endLine).range.end.character)
+                );
+                
+                // Split the input by {] or [} to get multiple regex patterns
+                const regexes = input.split(/\{\]|\[\}/g);
+                
+                if (regexes.length > 1) {
+                    // Multiple regex patterns detected
+                    
+                    // Start with the original text
+                    let currentText = textDocument.getText(range);
+                    let startLine = selection.start.line;
+                    let eol = textDocument.eol;
+                    
+                    // Process each regex one by one
+                    for (const regex of regexes) {
+                        if (regex.trim() === '') continue;
+                        
+                        // Create a block from the current text and align it
+                        let block = new Block(currentText, regex, startLine, eol).trim().align();
+                        
+                        // Generate the aligned text for the next iteration
+                        let lines: string[] = [];
+                        for (let line of block.lines) {
+                            let replacement = '';
+                            for (let part of line.parts) {
+                                replacement += part.value;
+                            }
+                            lines.push(replacement);
+                        }
+                        
+                        // Update the current text for the next regex alignment
+                        currentText = lines.join(eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n');
+                    }
+                    
+                    // Apply the final result
+                    await editor.edit(e => {
+                        e.replace(range, currentText);
+                    });
+                    
+                    vscode.window.showInformationMessage(`Applied ${regexes.length} alignment operations.`);
+                } else {
+                    // Single regex - use the original method
+                    let text = textDocument.getText(range);
+                    let block = new Block(text, input, selection.start.line, textDocument.eol).trim().align();
+                    
+                    await editor.edit(e => {
+                        for (let line of block.lines) {
+                            let deleteRange = new vscode.Range(
+                                new vscode.Position(line.number, 0), 
+                                new vscode.Position(line.number, textDocument.lineAt(line.number).range.end.character)
+                            );
+                            
+                            let replacement = '';
+                            for (let part of line.parts) {
+                                replacement += part.value;
+                            }
+                            
+                            e.replace(deleteRange, replacement);
+                        }
+                    });
+                }
+            } else {
+                vscode.window.showInformationMessage("Please select multiple lines to align.");
+            }
+        }
     }));
 }
 
