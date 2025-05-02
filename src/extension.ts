@@ -1009,6 +1009,88 @@ export function activate(context: vscode.ExtensionContext) {
         
         vscode.window.showInformationMessage(`Deleted operation "${selectedName}"`);
     }));
+
+    // Export operations to a file
+    context.subscriptions.push(vscode.commands.registerCommand('snippetcreator.exportReplaceOperations', async () => {
+        loadReplaceOperations(context);
+        
+        if (replaceOperations.length === 0) {
+            vscode.window.showInformationMessage("No replacement operations to export.");
+            return;
+        }
+        
+        // Ask user where to save the file
+        const uri = await vscode.window.showSaveDialog({
+            filters: {
+                'JSON': ['json']
+            },
+            title: 'Export Replace Operations',
+            defaultUri: vscode.Uri.file('replaceOperations.json')
+        });
+        
+        if (!uri) return;
+        
+        try {
+            // Convert to JSON and write to file
+            const jsonData = JSON.stringify(replaceOperations, null, 2);
+            await vscode.workspace.fs.writeFile(uri, Buffer.from(jsonData, 'utf8'));
+            vscode.window.showInformationMessage(`Successfully exported ${replaceOperations.length} operations.`);
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to export operations: ${error}`);
+        }
+    }));
+
+    // Import operations from a file
+    context.subscriptions.push(vscode.commands.registerCommand('snippetcreator.importReplaceOperations', async () => {
+        // Ask user to select the file
+        const uris = await vscode.window.showOpenDialog({
+            canSelectMany: false,
+            filters: {
+                'JSON': ['json']
+            },
+            title: 'Import Replace Operations'
+        });
+        
+        if (!uris || uris.length === 0) return;
+        
+        try {
+            // Read file content
+            const fileContent = await vscode.workspace.fs.readFile(uris[0]);
+            const importedOperations = JSON.parse(fileContent.toString());
+            
+            // Validate the imported data
+            if (!Array.isArray(importedOperations)) {
+                throw new Error('Invalid format: expected an array of operations');
+            }
+            
+            // Load current operations first
+            loadReplaceOperations(context);
+            
+            // Ask how to handle the import
+            const choice = await vscode.window.showQuickPick(
+                ['Merge (keep existing operations)', 'Replace (overwrite all existing operations)'],
+                { placeHolder: 'How do you want to import the operations?' }
+            );
+            
+            if (!choice) return;
+            
+            if (choice.startsWith('Merge')) {
+                // For merge, we need to avoid duplicates (by name)
+                const existingNames = new Set(replaceOperations.map(op => op.name));
+                const newOperations = importedOperations.filter(op => !existingNames.has(op.name));
+                replaceOperations = [...replaceOperations, ...newOperations];
+            } else {
+                // For replace, just use the imported operations
+                replaceOperations = importedOperations;
+            }
+            
+            // Save the updated operations
+            saveReplaceOperations(context);
+            vscode.window.showInformationMessage(`Successfully imported operations. Total: ${replaceOperations.length}`);
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to import operations: ${error}`);
+        }
+    }));
 }
 
 function writeToFile(folder: any, filename: any, content: any) {

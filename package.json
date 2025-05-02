@@ -87,6 +87,16 @@
                 "command": "snippetcreator.deleteReplaceOperation",
                 "title": "Delete Replace Operation",
                 "category": "SnippetCreator"
+            },
+            {
+                "command": "snippetcreator.exportReplaceOperations",
+                "title": "Export Replace Operations",
+                "category": "SnippetCreator"
+            },
+            {
+                "command": "snippetcreator.importReplaceOperations",
+                "title": "Import Replace Operations",
+                "category": "SnippetCreator"
             }
         ],
         "keybindings": [
