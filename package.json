@@ -2,7 +2,7 @@
     "name": "snippetcreator",
     "displayName": "snippetcreator",
     "description": "",
-    "version": "0.0.5",
+    "version": "0.0.6",
     "engines": {
         "vscode": "^1.99.0"
     },
@@ -98,9 +98,28 @@
                 "command": "snippetcreator.importReplaceOperations",
                 "title": "Import Replace Operations",
                 "category": "SnippetCreator"
+            },
+            {
+                "command": "snippetcreator.highlightSelection",
+                "title": "Highlight Selected Text",
+                "category": "SnippetCreator"
+            },
+            {
+                "command": "snippetcreator.removeHighlight",
+                "title": "Remove Highlight",
+                "category": "SnippetCreator"
+            },
+            {
+                "command": "snippetcreator.clearAllHighlights",
+                "title": "Clear All Highlights",
+                "category": "SnippetCreator"
             }
         ],
         "keybindings": [
+            {
+                "command": "snippetcreator.highlightSelection",
+                "key": "ctrl+alt+7"
+            },
             {
                 "command": "snippetcreator.replaceWithTabStopSyntax",
                 "key": "ctrl+shift+x"

@@ -1,6 +1,7 @@
 // The module 'vscode' contains the VS Code extensibility API
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
+import { window, OverviewRulerLane, TextEditorDecorationType, workspace, Range, Selection, Position, commands, ExtensionContext } from 'vscode';
 const parser = require('./parser');
 
 const fs = require('fs');
@@ -284,10 +285,242 @@ function saveReplaceOperations(context: vscode.ExtensionContext) {
     context.globalState.update('snippetcreator.replaceOperations', replaceOperations);
 }
 
+
+//###########################################################################################################
+// Highlighting
+//###########################################################################################################
+// Add this to your extension.ts file
+
+// Predefined vivid colors that work well in both light and dark themes
+const highlightColors = [
+    { light: '#FF4500AA', dark: '#FF6347AA' }, // Tomato/OrangeRed
+    { light: '#32CD32AA', dark: '#7CFC00AA' }, // LimeGreen
+    { light: '#1E90FFAA', dark: '#00BFFFAA' }, // DodgerBlue
+    { light: '#FF69B4AA', dark: '#FF1493AA' }, // HotPink
+    { light: '#FFD700AA', dark: '#FFAA00AA' }, // Gold/Orange
+    { light: '#9370DBAA', dark: '#9932CCAA' }, // MediumPurple
+    { light: '#00CED1AA', dark: '#40E0D0AA' }  // Turquoise
+];
+
+interface Highlightable {
+    expression: string;
+    decorator: vscode.TextEditorDecorationType;
+}
+
+class HighlightManager {
+    private highlights: Highlightable[] = [];
+    private decoratorTypes: vscode.TextEditorDecorationType[] = [];
+    private currentColorIndex = 0;
+
+    constructor() {
+        // Create decorator types for each color
+        this.createDecorators();
+    }
+
+    private createDecorators() {
+        highlightColors.forEach(color => {
+            const decorationType = vscode.window.createTextEditorDecorationType({
+                borderWidth: '2px',
+                borderStyle: 'solid',
+                borderRadius: '3px',
+                overviewRulerLane: vscode.OverviewRulerLane.Right,
+                light: {
+                    overviewRulerColor: color.light,
+                    backgroundColor: color.light,
+                    borderColor: color.light
+                },
+                dark: {
+                    overviewRulerColor: color.dark,
+                    backgroundColor: color.dark,
+                    borderColor: color.dark
+                }
+            });
+            this.decoratorTypes.push(decorationType);
+        });
+    }
+
+    // Highlight the selected text
+    public highlightSelection() {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) return;
+
+        let text = editor.document.getText(editor.selection);
+        if (!text) {
+            const range = editor.document.getWordRangeAtPosition(editor.selection.active);
+            if (range) {
+                text = editor.document.getText(range);
+            }
+        }
+
+        if (!text) {
+            vscode.window.showInformationMessage('No word selected!');
+            return;
+        }
+
+        // Escape special regex characters
+        const escapedText = text.replace(/([.*+?^=!:${}()|\[\]\/\\])/g, "\\$1");
+        
+        // Check if already highlighted
+        const existingIndex = this.highlights.findIndex(h => h.expression === escapedText);
+        if (existingIndex >= 0) {
+            // Toggle off if already highlighted
+            this.removeHighlight(existingIndex);
+            return;
+        }
+
+        // Add new highlight
+        const decorator = this.decoratorTypes[this.currentColorIndex];
+        this.highlights.push({
+            expression: escapedText, 
+            decorator: decorator
+        });
+        
+        // Update color index for next highlight
+        this.currentColorIndex = (this.currentColorIndex + 1) % this.decoratorTypes.length;
+        
+        this.updateDecorations();
+    }
+
+    // Remove a specific highlight
+    private removeHighlight(index: number) {
+        const highlight = this.highlights[index];
+        this.highlights.splice(index, 1);
+        this.updateDecorations();
+    }
+
+    // Remove a highlight by expression
+    public removeHighlightByExpression(expression: string) {
+        const index = this.highlights.findIndex(h => h.expression === expression);
+        if (index >= 0) {
+            this.removeHighlight(index);
+        }
+    }
+
+    // Clear all highlights
+    public clearAllHighlights() {
+        this.highlights = [];
+        this.updateDecorations();
+    }
+
+    // Show quick pick to remove a specific highlight
+    public showRemoveHighlightPicker() {
+        if (this.highlights.length === 0) {
+            vscode.window.showInformationMessage('No active highlights to remove');
+            return;
+        }
+
+        const items = this.highlights.map(h => h.expression);
+        items.push('* Remove All *');
+        
+        vscode.window.showQuickPick(items, { placeHolder: 'Select highlight to remove' })
+            .then(selected => {
+                if (!selected) return;
+                
+                if (selected === '* Remove All *') {
+                    this.clearAllHighlights();
+                } else {
+                    this.removeHighlightByExpression(selected);
+                }
+            });
+    }
+
+    // Update highlights in all visible editors
+    public updateDecorations() {
+        vscode.window.visibleTextEditors.forEach(editor => {
+            const text = editor.document.getText();
+            
+            // Clear all decorations first
+            this.highlights.forEach(highlight => {
+                editor.setDecorations(highlight.decorator, []);
+            });
+            
+            // Apply each highlight
+            this.highlights.forEach(highlight => {
+                const ranges: vscode.Range[] = [];
+                const regex = new RegExp(highlight.expression, 'g');
+                let match;
+                
+                while (match = regex.exec(text)) {
+                    const startPos = editor.document.positionAt(match.index);
+                    const endPos = editor.document.positionAt(match.index + match[0].length);
+                    ranges.push(new vscode.Range(startPos, endPos));
+                }
+                
+                editor.setDecorations(highlight.decorator, ranges);
+            });
+        });
+    }
+
+    // Dispose of all decorators
+    public dispose() {
+        this.decoratorTypes.forEach(decorator => {
+            decorator.dispose();
+        });
+        this.decoratorTypes = [];
+        this.highlights = [];
+    }
+}
+
+// Main highlight initialization function to add to your activate function
+export function initializeHighlighting(context: vscode.ExtensionContext) {
+    const highlightManager = new HighlightManager();
+    
+    // Register highlight commands
+    context.subscriptions.push(
+        vscode.commands.registerCommand('snippetcreator.highlightSelection', () => {
+            highlightManager.highlightSelection();
+        })
+    );
+    
+    context.subscriptions.push(
+        vscode.commands.registerCommand('snippetcreator.removeHighlight', () => {
+            highlightManager.showRemoveHighlightPicker();
+        })
+    );
+    
+    context.subscriptions.push(
+        vscode.commands.registerCommand('snippetcreator.clearAllHighlights', () => {
+            highlightManager.clearAllHighlights();
+        })
+    );
+    
+    // Update decorations when editor changes or text changes
+    context.subscriptions.push(
+        vscode.window.onDidChangeActiveTextEditor(() => {
+            highlightManager.updateDecorations();
+        })
+    );
+    
+    context.subscriptions.push(
+        vscode.workspace.onDidChangeTextDocument(() => {
+            highlightManager.updateDecorations();
+        })
+    );
+    
+    // Update decorations when visibility changes
+    context.subscriptions.push(
+        vscode.window.onDidChangeVisibleTextEditors(() => {
+            highlightManager.updateDecorations();
+        })
+    );
+
+    // Initial update for any open editors
+    if (vscode.window.activeTextEditor) {
+        highlightManager.updateDecorations();
+    }
+}
+//###########################################################################################################
+// End of Highlighting
+//###########################################################################################################
+
+
 // this method is called when your extension is activated
 // your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
     console.log('Congratulations, snippetcreator is now active!');
+
+    // Initialize highlighting functionality
+    initializeHighlighting(context);
 
     context.subscriptions.push(vscode.commands.registerCommand('snippetcreator.replaceWithTabStopSyntax', () => {
         let editor = vscode.window.activeTextEditor;
