@@ -1379,6 +1379,8 @@ export function activate(context: vscode.ExtensionContext) {
         }
     }));
 
+
+    // Register the number sequence replacement command
     context.subscriptions.push(vscode.commands.registerCommand('snippetcreator.replaceWithNumberSequence', async () => {
         // Get the active text editor
         const editor = vscode.window.activeTextEditor;
@@ -1389,14 +1391,14 @@ export function activate(context: vscode.ExtensionContext) {
         
         // Check if there are multiple selections
         if (editor.selections.length <= 1) {
-            vscode.window.showInformationMessage('This command requires multiple selections. Use regex select first or create multiple cursors.');
+            vscode.window.showInformationMessage('This command requires multiple selections.');
             return;
         }
         
         // Ask for start number and step
         const sequenceInput = await vscode.window.showInputBox({
             placeHolder: '1',
-            prompt: 'Enter start number and step (e.g., "1" for start=1,step=1 or "5 2" for start=5,step=2)'
+            prompt: 'Enter start number and step (e.g., "1", "01", "001", or "5 2" for start=5,step=2)'
         });
         
         // Exit if user canceled
@@ -1407,12 +1409,19 @@ export function activate(context: vscode.ExtensionContext) {
         try {
             // Parse input
             const parts = sequenceInput.trim() === '' ? ['1'] : sequenceInput.split(/\s+/);
-            const startNumber = parseInt(parts[0] || '1', 10);
+            const startValueStr = parts[0] || '1';
             const step = parts.length > 1 ? parseInt(parts[1], 10) : 1;
+            
+            // Parse the start number and determine format
+            const startNumber = parseInt(startValueStr, 10);
             
             if (isNaN(startNumber) || isNaN(step)) {
                 throw new Error('Invalid number format');
             }
+            
+            // Determine if zero-padding is needed and how many digits
+            const hasPadding = startValueStr.match(/^0+\d/);
+            const totalWidth = hasPadding ? startValueStr.length : 0;
             
             // Sort selections by position to ensure consistent numbering regardless of selection order
             const sortedSelections = [...editor.selections].sort((a, b) => {
@@ -1426,7 +1435,16 @@ export function activate(context: vscode.ExtensionContext) {
             await editor.edit(editBuilder => {
                 sortedSelections.forEach((selection, index) => {
                     const number = startNumber + (index * step);
-                    editBuilder.replace(selection, number.toString());
+                    
+                    // Format the number with appropriate padding if needed
+                    let formattedNumber;
+                    if (hasPadding) {
+                        formattedNumber = number.toString().padStart(totalWidth, '0');
+                    } else {
+                        formattedNumber = number.toString();
+                    }
+                    
+                    editBuilder.replace(selection, formattedNumber);
                 });
             });
             
