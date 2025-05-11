@@ -4,7 +4,7 @@
 
 **Terry Yang**
 
-I created this extension to address my own needs for efficient code snippet creation and text manipulation. As both the developer and a daily user of this tool, I can personally guarantee its **safety** and **reliability**. Every feature has been thoroughly tested in my own workflow, ensuring that SnippetCreator delivers a seamless and secure editing experience.
+I created this extension to address my own needs for efficient code snippet creation and text manipulation. As both the developer and a daily user of this tool, I can personally guarantee its **safety** and **reliability**. Every feature has been thoroughly tested in my own workflow, ensuring that *Terry's Snippet Creator* delivers a seamless and secure editing experience.
 
 If you have questions, feedback, or feature requests, feel free to reach out through the [GitHub repository](https://github.com/0x7FFFFFFFFFFFFFFF/snippetcreator).
 
@@ -12,7 +12,7 @@ If you have questions, feedback, or feature requests, feel free to reach out thr
 
 ## Overview
 
-SnippetCreator started as a simple tool to create code snippets in separate files, but has evolved into a powerful text manipulation toolkit. While the name remains "SnippetCreator," it now offers a diverse set of features to enhance your editing workflow in Visual Studio Code.
+*Terry's Snippet Creator* started as a simple tool to create code snippets in separate files, but has evolved into a powerful text manipulation toolkit. While the name remains *Terry's Snippet Creator*, it now offers a diverse set of features to enhance your editing workflow in Visual Studio Code.
 
 ## Features
 
