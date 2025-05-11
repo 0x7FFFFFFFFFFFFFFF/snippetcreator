@@ -2,7 +2,7 @@
     "name": "snippetcreator",
     "displayName": "snippetcreator",
     "description": "",
-    "version": "0.0.6",
+    "version": "0.0.7",
     "engines": {
         "vscode": "^1.99.0"
     },
@@ -113,6 +113,11 @@
                 "command": "snippetcreator.clearAllHighlights",
                 "title": "Clear All Highlights",
                 "category": "SnippetCreator"
+            },
+            {
+                "command": "snippetcreator.selectByRegex",
+                "title": "Select All Regex Matches",
+                "category": "SnippetCreator"
             }
         ],
         "keybindings": [
@@ -139,6 +144,11 @@
             {
                 "command": "snippetcreator.alignByRegex",
                 "key": "ctrl+alt+r",
+                "when": "editorTextFocus"
+            },
+            {
+                "command": "snippetcreator.selectByRegex",
+                "key": "ctrl+alt+s",
                 "when": "editorTextFocus"
             }
         ],

@@ -1,7 +1,6 @@
 // The module 'vscode' contains the VS Code extensibility API
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
-import { window, OverviewRulerLane, TextEditorDecorationType, workspace, Range, Selection, Position, commands, ExtensionContext } from 'vscode';
 const parser = require('./parser');
 
 const fs = require('fs');
@@ -74,7 +73,7 @@ function processReplacement(replacePattern: string): string {
         if (escapedBackslash) {
             return '\\';
         }
-        
+
         // Handle other escape sequences
         if (escapeChar) {
             switch (escapeChar[0]) {
@@ -89,7 +88,7 @@ function processReplacement(replacePattern: string): string {
                     return String.fromCharCode(parseInt(escapeChar.substring(1), 16));
             }
         }
-        
+
         // If no special handling was applied, return the original match
         return match;
     });
@@ -359,7 +358,7 @@ class HighlightManager {
 
         // Escape special regex characters
         const escapedText = text.replace(/([.*+?^=!:${}()|\[\]\/\\])/g, "\\$1");
-        
+
         // Check if already highlighted
         const existingIndex = this.highlights.findIndex(h => h.expression === escapedText);
         if (existingIndex >= 0) {
@@ -371,13 +370,13 @@ class HighlightManager {
         // Add new highlight
         const decorator = this.decoratorTypes[this.currentColorIndex];
         this.highlights.push({
-            expression: escapedText, 
+            expression: escapedText,
             decorator: decorator
         });
-        
+
         // Update color index for next highlight
         this.currentColorIndex = (this.currentColorIndex + 1) % this.decoratorTypes.length;
-        
+
         this.updateDecorations();
     }
 
@@ -411,11 +410,11 @@ class HighlightManager {
 
         const items = this.highlights.map(h => h.expression);
         items.push('* Remove All *');
-        
+
         vscode.window.showQuickPick(items, { placeHolder: 'Select highlight to remove' })
             .then(selected => {
                 if (!selected) return;
-                
+
                 if (selected === '* Remove All *') {
                     this.clearAllHighlights();
                 } else {
@@ -428,24 +427,24 @@ class HighlightManager {
     public updateDecorations() {
         vscode.window.visibleTextEditors.forEach(editor => {
             const text = editor.document.getText();
-            
+
             // Clear all decorations first
             this.highlights.forEach(highlight => {
                 editor.setDecorations(highlight.decorator, []);
             });
-            
+
             // Apply each highlight
             this.highlights.forEach(highlight => {
                 const ranges: vscode.Range[] = [];
                 const regex = new RegExp(highlight.expression, 'g');
                 let match;
-                
+
                 while (match = regex.exec(text)) {
                     const startPos = editor.document.positionAt(match.index);
                     const endPos = editor.document.positionAt(match.index + match[0].length);
                     ranges.push(new vscode.Range(startPos, endPos));
                 }
-                
+
                 editor.setDecorations(highlight.decorator, ranges);
             });
         });
@@ -464,39 +463,39 @@ class HighlightManager {
 // Main highlight initialization function to add to your activate function
 export function initializeHighlighting(context: vscode.ExtensionContext) {
     const highlightManager = new HighlightManager();
-    
+
     // Register highlight commands
     context.subscriptions.push(
         vscode.commands.registerCommand('snippetcreator.highlightSelection', () => {
             highlightManager.highlightSelection();
         })
     );
-    
+
     context.subscriptions.push(
         vscode.commands.registerCommand('snippetcreator.removeHighlight', () => {
             highlightManager.showRemoveHighlightPicker();
         })
     );
-    
+
     context.subscriptions.push(
         vscode.commands.registerCommand('snippetcreator.clearAllHighlights', () => {
             highlightManager.clearAllHighlights();
         })
     );
-    
+
     // Update decorations when editor changes or text changes
     context.subscriptions.push(
         vscode.window.onDidChangeActiveTextEditor(() => {
             highlightManager.updateDecorations();
         })
     );
-    
+
     context.subscriptions.push(
         vscode.workspace.onDidChangeTextDocument(() => {
             highlightManager.updateDecorations();
         })
     );
-    
+
     // Update decorations when visibility changes
     context.subscriptions.push(
         vscode.window.onDidChangeVisibleTextEditors(() => {
@@ -744,46 +743,46 @@ export function activate(context: vscode.ExtensionContext) {
             return;
         }
 
-        let input = await vscode.window.showInputBox({ 
-            prompt: 'Enter regular expression(s)', 
+        let input = await vscode.window.showInputBox({
+            prompt: 'Enter regular expression(s)',
             placeHolder: 'e.g. :{]= (first align by : then by =)'
         });
-        
+
         if (input !== undefined && input.length > 0) {
             let selection: vscode.Selection = editor.selection;
             if (!selection.isEmpty) {
                 let textDocument = editor.document;
-                
+
                 // Don't select last line, if no character of line is selected.
                 let endLine = selection.end.line;
                 let endPosition = selection.end;
                 if (endPosition.character === 0) {
                     endLine--;
                 }
-                
+
                 let range = new vscode.Range(
-                    new vscode.Position(selection.start.line, 0), 
+                    new vscode.Position(selection.start.line, 0),
                     new vscode.Position(endLine, textDocument.lineAt(endLine).range.end.character)
                 );
-                
+
                 // Split the input by {] or [} to get multiple regex patterns
                 const regexes = input.split(/\{\]|\[\}/g);
-                
+
                 if (regexes.length > 1) {
                     // Multiple regex patterns detected
-                    
+
                     // Start with the original text
                     let currentText = textDocument.getText(range);
                     let startLine = selection.start.line;
                     let eol = textDocument.eol;
-                    
+
                     // Process each regex one by one
                     for (const regex of regexes) {
                         if (regex.trim() === '') continue;
-                        
+
                         // Create a block from the current text and align it
                         let block = new Block(currentText, regex, startLine, eol).trim().align();
-                        
+
                         // Generate the aligned text for the next iteration
                         let lines: string[] = [];
                         for (let line of block.lines) {
@@ -793,34 +792,34 @@ export function activate(context: vscode.ExtensionContext) {
                             }
                             lines.push(replacement);
                         }
-                        
+
                         // Update the current text for the next regex alignment
                         currentText = lines.join(eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n');
                     }
-                    
+
                     // Apply the final result
                     await editor.edit(e => {
                         e.replace(range, currentText);
                     });
-                    
+
                     vscode.window.showInformationMessage(`Applied ${regexes.length} alignment operations.`);
                 } else {
                     // Single regex - use the original method
                     let text = textDocument.getText(range);
                     let block = new Block(text, input, selection.start.line, textDocument.eol).trim().align();
-                    
+
                     await editor.edit(e => {
                         for (let line of block.lines) {
                             let deleteRange = new vscode.Range(
-                                new vscode.Position(line.number, 0), 
+                                new vscode.Position(line.number, 0),
                                 new vscode.Position(line.number, textDocument.lineAt(line.number).range.end.character)
                             );
-                            
+
                             let replacement = '';
                             for (let part of line.parts) {
                                 replacement += part.value;
                             }
-                            
+
                             e.replace(deleteRange, replacement);
                         }
                     });
@@ -835,35 +834,35 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(vscode.commands.registerCommand('snippetcreator.runReplaceOperation', async () => {
         // Load operations first
         loadReplaceOperations(context);
-        
+
         if (replaceOperations.length === 0) {
             vscode.window.showInformationMessage("No replacement operations defined. Please create one first.");
             return;
         }
-        
+
         // Show a quick pick of all operations
         const operationNames = replaceOperations.map(op => op.name);
         const selectedName = await vscode.window.showQuickPick(operationNames, {
             placeHolder: 'Select a replace operation to run'
         });
-        
+
         if (!selectedName) return;
-        
+
         // Find the selected operation
         const operation = replaceOperations.find(op => op.name === selectedName);
         if (!operation) return;
-        
+
         // Get the active editor
         const editor = vscode.window.activeTextEditor;
         if (!editor) {
             vscode.window.showErrorMessage("No active editor");
             return;
         }
-        
+
         // Determine range: selection if exists, otherwise full document
         let range: vscode.Range;
         const selection = editor.selection;
-        
+
         if (!selection.isEmpty) {
             // Use selection
             range = selection;
@@ -876,11 +875,11 @@ export function activate(context: vscode.ExtensionContext) {
                 document.positionAt(fullText.length)
             );
         }
-        
+
         // Get text to process
         const document = editor.document;
         const textToProcess = document.getText(range);
-        
+
         // Apply each operation in sequence
         let currentText = textToProcess;
         for (const op of operation.operations) {
@@ -893,55 +892,55 @@ export function activate(context: vscode.ExtensionContext) {
                 return;
             }
         }
-        
+
         // Apply the final result
         await editor.edit(editBuilder => {
             editBuilder.replace(range, currentText);
         });
-        
+
         vscode.window.showInformationMessage(`Applied "${selectedName}" with ${operation.operations.length} replacement steps`);
     }));
 
     context.subscriptions.push(vscode.commands.registerCommand('snippetcreator.createReplaceOperation', async () => {
         // Load operations first
         loadReplaceOperations(context);
-        
+
         // Ask for all parameters in one go
         const input = await vscode.window.showInputBox({
             prompt: 'Enter operation name{]find pattern{]replace pattern (use {] or [} as separators)',
             placeHolder: 'e.g., Fix PDF Bookmark{](\\s+)(\\d+)${]\\t$1{]^(\\d+)\\.(\\d+)\\.(\\d+){]\\t\\t$1.$2.$3'
         });
-        
+
         if (!input) return;
-        
+
         // Parse the input using {] or [} as separators
         const parts = input.split(/\{\]|\[\}/g);
-        
+
         if (parts.length < 3 || parts.length % 2 !== 1) {
             vscode.window.showErrorMessage("Invalid format. Please use: name{]find1{]replace1{]find2{]replace2...");
             return;
         }
-        
+
         const operationName = parts[0].trim();
-        
+
         // Check if name already exists
         if (replaceOperations.some(op => op.name === operationName)) {
             const overwrite = await vscode.window.showQuickPick(['Yes', 'No'], {
                 placeHolder: `An operation named "${operationName}" already exists. Overwrite?`
             });
-            
+
             if (overwrite !== 'Yes') return;
-            
+
             // Remove the existing operation
             replaceOperations = replaceOperations.filter(op => op.name !== operationName);
         }
-        
+
         // Create a new operation
         const newOperation: ReplaceOperation = {
             name: operationName,
             operations: []
         };
-        
+
         // Add all find/replace pairs
         for (let i = 1; i < parts.length; i += 2) {
             if (i + 1 < parts.length) {
@@ -951,11 +950,11 @@ export function activate(context: vscode.ExtensionContext) {
                 });
             }
         }
-        
+
         // Save the operation
         replaceOperations.push(newOperation);
         saveReplaceOperations(context);
-        
+
         vscode.window.showInformationMessage(
             `Created replacement operation "${operationName}" with ${newOperation.operations.length} steps`
         );
@@ -964,69 +963,69 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(vscode.commands.registerCommand('snippetcreator.editReplaceOperation', async () => {
         // Load operations first
         loadReplaceOperations(context);
-        
+
         if (replaceOperations.length === 0) {
             vscode.window.showInformationMessage("No replacement operations defined. Please create one first.");
             return;
         }
-        
+
         // Show a quick pick of all operations
         const operationNames = replaceOperations.map(op => op.name);
         const selectedName = await vscode.window.showQuickPick(operationNames, {
             placeHolder: 'Select a replace operation to edit'
         });
-        
+
         if (!selectedName) return;
-        
+
         // Find the selected operation
         const operationIndex = replaceOperations.findIndex(op => op.name === selectedName);
         if (operationIndex === -1) return;
-        
+
         const operation = replaceOperations[operationIndex];
-        
+
         // Create an input string from the current operation
         let inputString = operation.name;
-        
+
         for (const op of operation.operations) {
             // Do NOT escape backslashes for editing - show the original pattern
             inputString += `{]${op.find}{]${op.replace}`;
         }
-        
+
         // Show the input string for editing
         const editedInput = await vscode.window.showInputBox({
             prompt: 'Edit operation (use {] or [} as separators)',
             value: inputString
         });
-        
+
         if (!editedInput) return;
-        
+
         // Parse the edited input
         const parts = editedInput.split(/\{\]|\[\}/g);
-        
+
         if (parts.length < 3 || parts.length % 2 !== 1) {
             vscode.window.showErrorMessage("Invalid format. Please use: name{]find1{]replace1{]find2{]replace2...");
             return;
         }
-        
+
         const newOperationName = parts[0].trim();
-        
+
         // Check if we're renaming to an existing name
-        if (newOperationName !== operation.name && 
+        if (newOperationName !== operation.name &&
             replaceOperations.some(op => op.name === newOperationName)) {
             const overwrite = await vscode.window.showQuickPick(['Yes', 'No'], {
                 placeHolder: `An operation named "${newOperationName}" already exists. Overwrite?`
             });
-            
+
             if (overwrite !== 'Yes') return;
-            
+
             // Remove the existing operation with that name
             replaceOperations = replaceOperations.filter(op => op.name !== newOperationName);
         }
-        
+
         // Update the operation
         operation.name = newOperationName;
         operation.operations = [];
-        
+
         // Add all find/replace pairs
         for (let i = 1; i < parts.length; i += 2) {
             if (i + 1 < parts.length) {
@@ -1036,10 +1035,10 @@ export function activate(context: vscode.ExtensionContext) {
                 });
             }
         }
-        
+
         // Save the updated operations
         saveReplaceOperations(context);
-        
+
         vscode.window.showInformationMessage(
             `Updated replacement operation "${newOperationName}" with ${operation.operations.length} steps`
         );
@@ -1048,12 +1047,12 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(vscode.commands.registerCommand('snippetcreator.listReplaceOperations', async () => {
         // Load operations first
         loadReplaceOperations(context);
-        
+
         if (replaceOperations.length === 0) {
             vscode.window.showInformationMessage("No replacement operations defined.");
             return;
         }
-        
+
         // Create a quick pick with details about each operation
         const details = replaceOperations.map(op => {
             return {
@@ -1061,24 +1060,24 @@ export function activate(context: vscode.ExtensionContext) {
                 detail: `${op.operations.length} replacement ${op.operations.length === 1 ? 'step' : 'steps'}`
             };
         });
-        
+
         const selected = await vscode.window.showQuickPick(details, {
             placeHolder: 'Select an operation to view details',
         });
-        
+
         if (!selected) return;
-        
+
         // Show details for the selected operation
         const operation = replaceOperations.find(op => op.name === selected.label);
         if (!operation) return;
-        
+
         const detailsPanel = vscode.window.createWebviewPanel(
             'replacementDetails',
             `Details: ${operation.name}`,
             vscode.ViewColumn.One,
             {}
         );
-        
+
         let html = `
             <html>
                 <head>
@@ -1121,7 +1120,7 @@ export function activate(context: vscode.ExtensionContext) {
                             <th>Replace Pattern</th>
                         </tr>
         `;
-        
+
         operation.operations.forEach((step, i) => {
             html += `
                 <tr>
@@ -1131,13 +1130,13 @@ export function activate(context: vscode.ExtensionContext) {
                 </tr>
             `;
         });
-        
+
         html += `
                     </table>
                 </body>
             </html>
         `;
-        
+
         detailsPanel.webview.html = html;
     }));
 
@@ -1148,27 +1147,27 @@ export function activate(context: vscode.ExtensionContext) {
             vscode.window.showErrorMessage("No active editor");
             return;
         }
-        
+
         // Ask for all parameters in one go
         const input = await vscode.window.showInputBox({
             prompt: 'Enter find pattern{]replace pattern (use {] or [} as separators)',
             placeHolder: 'e.g., (\\s+)(\\d+)${]\\t$1'
         });
-        
+
         if (!input) return;
-        
+
         // Parse the input using {] or [} as separators
         const parts = input.split(/\{\]|\[\}/g);
-        
+
         if (parts.length < 2) {
             vscode.window.showErrorMessage("Invalid format. Please use: find{]replace");
             return;
         }
-        
+
         // Determine range: selection if exists, otherwise full document
         let range: vscode.Range;
         const selection = editor.selection;
-        
+
         if (!selection.isEmpty) {
             // Use selection
             range = selection;
@@ -1181,19 +1180,19 @@ export function activate(context: vscode.ExtensionContext) {
                 document.positionAt(fullText.length)
             );
         }
-        
+
         // Get text to process
         const document = editor.document;
         const textToProcess = document.getText(range);
-        
+
         // Apply each find/replace pair in sequence
         let currentText = textToProcess;
-        
+
         for (let i = 0; i < parts.length - 1; i += 2) {
             try {
                 const find = parts[i].trim();
                 const replace = parts[i + 1].trim();
-                
+
                 // Use regex replace
                 const regex = new RegExp(find, 'gm');
                 currentText = currentText.replace(regex, processReplacement(replace));
@@ -1202,12 +1201,12 @@ export function activate(context: vscode.ExtensionContext) {
                 return;
             }
         }
-        
+
         // Apply the final result
         await editor.edit(editBuilder => {
             editBuilder.replace(range, currentText);
         });
-        
+
         const stepsCount = Math.floor(parts.length / 2);
         vscode.window.showInformationMessage(`Applied ${stepsCount} replacement ${stepsCount === 1 ? 'step' : 'steps'}`);
     }));
@@ -1215,43 +1214,43 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(vscode.commands.registerCommand('snippetcreator.deleteReplaceOperation', async () => {
         // Load operations first
         loadReplaceOperations(context);
-        
+
         if (replaceOperations.length === 0) {
             vscode.window.showInformationMessage("No replacement operations defined.");
             return;
         }
-        
+
         // Show a quick pick of all operations
         const operationNames = replaceOperations.map(op => op.name);
         const selectedName = await vscode.window.showQuickPick(operationNames, {
             placeHolder: 'Select a replace operation to delete'
         });
-        
+
         if (!selectedName) return;
-        
+
         // Confirm deletion
         const confirmDelete = await vscode.window.showQuickPick(['Yes', 'No'], {
             placeHolder: `Delete operation "${selectedName}"?`
         });
-        
+
         if (confirmDelete !== 'Yes') return;
-        
+
         // Delete the operation
         replaceOperations = replaceOperations.filter(op => op.name !== selectedName);
         saveReplaceOperations(context);
-        
+
         vscode.window.showInformationMessage(`Deleted operation "${selectedName}"`);
     }));
 
     // Export operations to a file
     context.subscriptions.push(vscode.commands.registerCommand('snippetcreator.exportReplaceOperations', async () => {
         loadReplaceOperations(context);
-        
+
         if (replaceOperations.length === 0) {
             vscode.window.showInformationMessage("No replacement operations to export.");
             return;
         }
-        
+
         // Ask user where to save the file
         const uri = await vscode.window.showSaveDialog({
             filters: {
@@ -1260,9 +1259,9 @@ export function activate(context: vscode.ExtensionContext) {
             title: 'Export Replace Operations',
             defaultUri: vscode.Uri.file('replaceOperations.json')
         });
-        
+
         if (!uri) return;
-        
+
         try {
             // Convert to JSON and write to file
             const jsonData = JSON.stringify(replaceOperations, null, 2);
@@ -1283,30 +1282,30 @@ export function activate(context: vscode.ExtensionContext) {
             },
             title: 'Import Replace Operations'
         });
-        
+
         if (!uris || uris.length === 0) return;
-        
+
         try {
             // Read file content
             const fileContent = await vscode.workspace.fs.readFile(uris[0]);
             const importedOperations = JSON.parse(fileContent.toString());
-            
+
             // Validate the imported data
             if (!Array.isArray(importedOperations)) {
                 throw new Error('Invalid format: expected an array of operations');
             }
-            
+
             // Load current operations first
             loadReplaceOperations(context);
-            
+
             // Ask how to handle the import
             const choice = await vscode.window.showQuickPick(
                 ['Merge (keep existing operations)', 'Replace (overwrite all existing operations)'],
                 { placeHolder: 'How do you want to import the operations?' }
             );
-            
+
             if (!choice) return;
-            
+
             if (choice.startsWith('Merge')) {
                 // For merge, we need to avoid duplicates (by name)
                 const existingNames = new Set(replaceOperations.map(op => op.name));
@@ -1316,12 +1315,67 @@ export function activate(context: vscode.ExtensionContext) {
                 // For replace, just use the imported operations
                 replaceOperations = importedOperations;
             }
-            
+
             // Save the updated operations
             saveReplaceOperations(context);
             vscode.window.showInformationMessage(`Successfully imported operations. Total: ${replaceOperations.length}`);
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to import operations: ${error}`);
+        }
+    }));
+
+
+    // Register the regex selection command
+    context.subscriptions.push(vscode.commands.registerCommand('snippetcreator.selectByRegex', async () => {
+        // Get the active text editor
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+            vscode.window.showInformationMessage('No editor is active');
+            return;
+        }
+
+        // Ask the user for the regex pattern
+        const regexPattern = await vscode.window.showInputBox({
+            placeHolder: 'Enter regex pattern',
+            prompt: 'Enter a regular expression to select all matching text'
+        });
+
+        // Exit if user canceled or entered empty string
+        if (!regexPattern) {
+            return;
+        }
+
+        try {
+            // Create the regex from the user input
+            const regex = new RegExp(regexPattern, 'g');
+
+            // Get the document text
+            const document = editor.document;
+            const text = document.getText();
+
+            // Find all matches
+            const selections: vscode.Selection[] = [];
+            let match;
+
+            while ((match = regex.exec(text)) !== null) {
+                // Get the position of the match
+                const startPos = document.positionAt(match.index);
+                const endPos = document.positionAt(match.index + match[0].length);
+
+                // Create a selection for this match
+                selections.push(new vscode.Selection(startPos, endPos));
+            }
+
+            // Apply all the selections
+            if (selections.length > 0) {
+                editor.selections = selections;
+                // Reveal the first selection
+                editor.revealRange(new vscode.Range(selections[0].start, selections[0].end));
+            } else {
+                vscode.window.showInformationMessage('No matches found for the regex pattern');
+            }
+        } catch (error) {
+            vscode.window.showErrorMessage(`Invalid regex pattern: ${error instanceof Error ? error.message : String(error)}`);
         }
     }));
 }
