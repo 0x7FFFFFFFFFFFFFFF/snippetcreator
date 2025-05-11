@@ -1621,6 +1621,55 @@ export function activate(context: vscode.ExtensionContext) {
             vscode.window.showErrorMessage(`Error: ${error instanceof Error ? error.message : String(error)}`);
         }
     }));
+
+    // Register the line selection/manipulation command
+    context.subscriptions.push(vscode.commands.registerCommand('snippetcreator.lineOperation', () => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+            vscode.window.showInformationMessage('No editor is active');
+            return;
+        }
+        
+        const document = editor.document;
+        const selections = editor.selections;
+        
+        if (selections.length === 1 && selections[0].isEmpty) {
+            // Case 1: No selection and only one cursor - select the whole line
+            const lineNumber = selections[0].active.line;
+            const line = document.lineAt(lineNumber);
+            const newSelection = new vscode.Selection(
+                new vscode.Position(lineNumber, 0),
+                new vscode.Position(lineNumber, line.text.length)
+            );
+            editor.selection = newSelection;
+        } else if (selections.length === 1 && !selections[0].isEmpty && 
+                selections[0].start.line !== selections[0].end.line) {
+            // Case 2: Multiline selection - create cursors at the end of each line
+            const startLine = selections[0].start.line;
+            const endLine = selections[0].end.line;
+            const newSelections: vscode.Selection[] = [];
+            
+            for (let i = startLine; i <= endLine; i++) {
+                const line = document.lineAt(i);
+                const position = new vscode.Position(i, line.text.length);
+                newSelections.push(new vscode.Selection(position, position));
+            }
+            
+            editor.selections = newSelections;
+        } else {
+            // Case 3: Multiple cursors already - move them to end of line
+            const newSelections: vscode.Selection[] = [];
+            
+            for (const selection of selections) {
+                const lineNumber = selection.active.line;
+                const line = document.lineAt(lineNumber);
+                const position = new vscode.Position(lineNumber, line.text.length);
+                newSelections.push(new vscode.Selection(position, position));
+            }
+            
+            editor.selections = newSelections;
+        }
+    }));
 }
 
 function writeToFile(folder: any, filename: any, content: any) {

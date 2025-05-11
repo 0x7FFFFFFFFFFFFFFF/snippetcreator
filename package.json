@@ -2,7 +2,7 @@
     "name": "snippetcreator",
     "displayName": "Terry's Snippet Creator",
     "description": "",
-    "version": "1.0.8",
+    "version": "1.0.9",
     "engines": {
         "vscode": "^1.99.0"
     },
@@ -127,9 +127,18 @@
             {
                 "command": "snippetcreator.operateOnNumbers",
                 "title": "Perform Math Operation on Selected Numbers"
+            },
+            {
+                "command": "snippetcreator.lineOperation",
+                "title": "Line Operation (Select/Cursors)"
             }
         ],
         "keybindings": [
+            {
+                "command": "snippetcreator.lineOperation",
+                "key": "alt+l",
+                "when": "editorTextFocus"
+            },
             {
                 "command": "snippetcreator.highlightSelection",
                 "key": "ctrl+alt+7"

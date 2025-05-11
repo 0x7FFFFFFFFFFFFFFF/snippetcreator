@@ -74,6 +74,7 @@ Store and replay multiple text replacement operations:
 | Add a tabstop | `Ctrl+Shift+X` |
 | Add a multi-choice tabstop | `Ctrl+Shift+Alt+X` |
 | Save Current Snippet | `Ctrl+Shift+Z` |
+| Line Operations | `Alt+L` |
 
 Use the command palette for other features. In the command palette, type "SnippetCreator" to see all available commands.
 
