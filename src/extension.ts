@@ -1378,6 +1378,62 @@ export function activate(context: vscode.ExtensionContext) {
             vscode.window.showErrorMessage(`Invalid regex pattern: ${error instanceof Error ? error.message : String(error)}`);
         }
     }));
+
+    context.subscriptions.push(vscode.commands.registerCommand('snippetcreator.replaceWithNumberSequence', async () => {
+        // Get the active text editor
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+            vscode.window.showInformationMessage('No editor is active');
+            return;
+        }
+        
+        // Check if there are multiple selections
+        if (editor.selections.length <= 1) {
+            vscode.window.showInformationMessage('This command requires multiple selections. Use regex select first or create multiple cursors.');
+            return;
+        }
+        
+        // Ask for start number and step
+        const sequenceInput = await vscode.window.showInputBox({
+            placeHolder: '1',
+            prompt: 'Enter start number and step (e.g., "1" for start=1,step=1 or "5 2" for start=5,step=2)'
+        });
+        
+        // Exit if user canceled
+        if (sequenceInput === undefined) {
+            return;
+        }
+        
+        try {
+            // Parse input
+            const parts = sequenceInput.trim() === '' ? ['1'] : sequenceInput.split(/\s+/);
+            const startNumber = parseInt(parts[0] || '1', 10);
+            const step = parts.length > 1 ? parseInt(parts[1], 10) : 1;
+            
+            if (isNaN(startNumber) || isNaN(step)) {
+                throw new Error('Invalid number format');
+            }
+            
+            // Sort selections by position to ensure consistent numbering regardless of selection order
+            const sortedSelections = [...editor.selections].sort((a, b) => {
+                if (a.start.line !== b.start.line) {
+                    return a.start.line - b.start.line;
+                }
+                return a.start.character - b.start.character;
+            });
+            
+            // Replace each selection with the appropriate number in the sequence
+            await editor.edit(editBuilder => {
+                sortedSelections.forEach((selection, index) => {
+                    const number = startNumber + (index * step);
+                    editBuilder.replace(selection, number.toString());
+                });
+            });
+            
+        } catch (error) {
+            vscode.window.showErrorMessage(`Error: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    }));
 }
 
 function writeToFile(folder: any, filename: any, content: any) {
