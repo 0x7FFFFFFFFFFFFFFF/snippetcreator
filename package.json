@@ -2,7 +2,7 @@
     "name": "snippetcreator",
     "displayName": "snippetcreator",
     "description": "",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "engines": {
         "vscode": "^1.99.0"
     },
@@ -123,6 +123,10 @@
             {
                 "command": "snippetcreator.replaceWithNumberSequence",
                 "title": "Replace Selections with Number Sequence"
+            },
+            {
+                "command": "snippetcreator.operateOnNumbers",
+                "title": "Perform Math Operation on Selected Numbers"
             }
         ],
         "keybindings": [
@@ -159,6 +163,11 @@
             {
                 "command": "snippetcreator.replaceWithNumberSequence",
                 "key": "ctrl+shift+n",
+                "when": "editorHasMultipleSelections"
+            },
+            {
+                "command": "snippetcreator.operateOnNumbers",
+                "key": "ctrl+shift+m",
                 "when": "editorHasMultipleSelections"
             }
         ],

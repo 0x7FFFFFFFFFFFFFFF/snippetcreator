@@ -94,6 +94,116 @@ function processReplacement(replacePattern: string): string {
     });
 }
 
+// Helper function to process numbers in text based on the provided operation
+function processNumberOperation(text: string, operation: string): string {
+    // Simple operations like +5, -10, *2, /3
+    const simpleOpRegex = /^([+\-*/])(\d*\.?\d+)$/;
+    const simpleMatch = operation.match(simpleOpRegex);
+    
+    // Check for decimal precision specifier at the end (//n)
+    const hasPrecisionSpecifier = operation.match(/\/\/(\d+)$/);
+    const precision = hasPrecisionSpecifier ? parseInt(hasPrecisionSpecifier[1], 10) : null;
+    
+    // Remove precision specifier for processing
+    let operationWithoutPrecision = operation;
+    if (hasPrecisionSpecifier) {
+        operationWithoutPrecision = operation.replace(/\/\/\d+$/, '');
+    }
+    
+    // Find all numbers in the text
+    const numberRegex = /-?\d+(\.\d+)?/g;
+    
+    // If the entire text is a number, process it
+    if (text.trim().match(/^-?\d+(\.\d+)?$/)) {
+        const num = parseFloat(text);
+        let result: number;
+        
+        if (simpleMatch) {
+            // Handle simple operations
+            const operator = simpleMatch[1];
+            const operand = parseFloat(simpleMatch[2]);
+            
+            switch (operator) {
+                case '+': result = num + operand; break;
+                case '-': result = num - operand; break;
+                case '*': result = num * operand; break;
+                case '/': result = num / operand; break;
+                default: throw new Error('Unknown operator');
+            }
+        } else {
+            // Handle complex expressions
+            // Replace $ with the actual number
+            const expr = operationWithoutPrecision.replace(/\$/g, num.toString());
+            
+            try {
+                // Use Function constructor to evaluate the expression safely
+                result = Function(`'use strict'; return (${expr})`)();
+                
+                if (typeof result !== 'number' || !isFinite(result)) {
+                    throw new Error('Expression did not evaluate to a valid number');
+                }
+            } catch (error: unknown) {
+                // Fix: Properly handle the unknown type error
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                throw new Error(`Invalid expression: ${errorMessage}`);
+            }
+        }
+        
+        // Format the result based on precision
+        if (precision !== null) {
+            return result.toFixed(precision);
+        }
+        
+        // Return the result as a string
+        return result.toString();
+    } else {
+        // The text contains other characters besides numbers
+        return text.replace(numberRegex, (match) => {
+            const num = parseFloat(match);
+            let result: number;
+            
+            if (simpleMatch) {
+                // Handle simple operations
+                const operator = simpleMatch[1];
+                const operand = parseFloat(simpleMatch[2]);
+                
+                switch (operator) {
+                    case '+': result = num + operand; break;
+                    case '-': result = num - operand; break;
+                    case '*': result = num * operand; break;
+                    case '/': result = num / operand; break;
+                    default: throw new Error('Unknown operator');
+                }
+            } else {
+                // Handle complex expressions
+                // Replace $ with the actual number
+                const expr = operationWithoutPrecision.replace(/\$/g, num.toString());
+                
+                try {
+                    // Use Function constructor to evaluate the expression safely
+                    result = Function(`'use strict'; return (${expr})`)();
+                    
+                    if (typeof result !== 'number' || !isFinite(result)) {
+                        throw new Error('Expression did not evaluate to a valid number');
+                    }
+                } catch (error: unknown) {
+                    // Fix: Properly handle the unknown type error
+                    const errorMessage = error instanceof Error ? error.message : String(error);
+                    throw new Error(`Invalid expression: ${errorMessage}`);
+                }
+            }
+            
+            // Format the result based on precision
+            if (precision !== null) {
+                return result.toFixed(precision);
+            }
+            
+            // Return the result as a string
+            return result.toString();
+        });
+    }
+}
+
 // Properly escape backslashes for display
 function escapeForDisplay(str: string): string {
     return str.replace(/\\/g, '\\\\');
@@ -1446,6 +1556,53 @@ export function activate(context: vscode.ExtensionContext) {
                     
                     editBuilder.replace(selection, formattedNumber);
                 });
+            });
+            
+        } catch (error) {
+            vscode.window.showErrorMessage(`Error: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    }));
+
+    // Register the number operation command
+    context.subscriptions.push(vscode.commands.registerCommand('snippetcreator.operateOnNumbers', async () => {
+        // Get the active text editor
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+            vscode.window.showInformationMessage('No editor is active');
+            return;
+        }
+        
+        // Check if there are selections
+        if (editor.selections.length < 1) {
+            vscode.window.showInformationMessage('This command requires at least one selection.');
+            return;
+        }
+        
+        // Ask for the operation to perform
+        const operation = await vscode.window.showInputBox({
+            placeHolder: '+1, *2, /3, ($ + 10) / 2, ($ * 2.5)//3',
+            prompt: 'Enter operation to perform on numbers (use $ to reference the number)'
+        });
+        
+        // Exit if user canceled
+        if (operation === undefined) {
+            return;
+        }
+        
+        try {
+            // Wait for edit to complete
+            await editor.edit(editBuilder => {
+                // Process each selection
+                for (const selection of editor.selections) {
+                    // Get the selected text
+                    const selectionText = editor.document.getText(selection);
+                    
+                    // Find numbers in the selection
+                    const result = processNumberOperation(selectionText, operation);
+                    
+                    // Replace the selection with the result
+                    editBuilder.replace(selection, result);
+                }
             });
             
         } catch (error) {
