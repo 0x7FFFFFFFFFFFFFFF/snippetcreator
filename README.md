@@ -1,5 +1,15 @@
 # SnippetCreator - VS Code Extension
 
+## Words From The Author
+
+**Terry Yang**
+
+I created this extension to address my own needs for efficient code snippet creation and text manipulation. As both the developer and a daily user of this tool, I can personally guarantee its **safety** and **reliability**. Every feature has been thoroughly tested in my own workflow, ensuring that SnippetCreator delivers a seamless and secure editing experience.
+
+If you have questions, feedback, or feature requests, feel free to reach out through the [GitHub repository](https://github.com/0x7FFFFFFFFFFFFFFF/snippetcreator).
+
+*"Build tools you'd trust to use yourself."*
+
 ## Overview
 
 SnippetCreator started as a simple tool to create code snippets in separate files, but has evolved into a powerful text manipulation toolkit. While the name remains "SnippetCreator," it now offers a diverse set of features to enhance your editing workflow in Visual Studio Code.
@@ -73,3 +83,4 @@ When clearing highlights, you may need switch to a different editor tab and back
 ## License
 
 WTFPL (What The F*** Public License) - Use at your own risk. No warranties or guarantees are provided. By using this extension, you agree to the terms of the WTFPL.
+
