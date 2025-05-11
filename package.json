@@ -2,7 +2,7 @@
     "name": "snippetcreator",
     "displayName": "snippetcreator",
     "description": "",
-    "version": "0.1.1",
+    "version": "1.0.0",
     "engines": {
         "vscode": "^1.99.0"
     },
@@ -36,7 +36,7 @@
             },
             {
                 "command": "snippetcreator.replaceWithTabStopChoiceSyntax",
-                "title": "Replace selection with choice tab stop syntax like ${10|Edde,rocks|}",
+                "title": "Replace selection with choice tab stop syntax like ${10|Terry,rocks|}",
                 "category": "SnippetCreator"
             },
             {
