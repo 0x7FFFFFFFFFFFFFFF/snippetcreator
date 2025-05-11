@@ -1445,7 +1445,7 @@ export function activate(context: vscode.ExtensionContext) {
         }
 
         // Ask the user for the regex pattern
-        const regexPattern = await vscode.window.showInputBox({
+        let regexPattern = await vscode.window.showInputBox({
             placeHolder: 'Enter regex pattern',
             prompt: 'Enter a regular expression to select all matching text'
         });
@@ -1456,8 +1456,21 @@ export function activate(context: vscode.ExtensionContext) {
         }
 
         try {
-            // Create the regex from the user input
-            const regex = new RegExp(regexPattern, 'g');
+            // Extract flags if the pattern starts with (?flags)
+            let flags = 'g'; // Always include 'g' flag for global matching
+            const flagsMatch = regexPattern.match(/^\(\?([dgimsuvy]+)\)(.*)/);
+            
+            if (flagsMatch) {
+                // Get unique flags (removing duplicates)
+                const uniqueFlags = [...new Set(flagsMatch[1])].join('');
+                // Make sure 'g' is included
+                flags = uniqueFlags.includes('g') ? uniqueFlags : uniqueFlags + 'g';
+                // Update the pattern without the flags part
+                regexPattern = flagsMatch[2];
+            }
+
+            // Create the regex from the user input with extracted flags
+            const regex = new RegExp(regexPattern, flags);
 
             // Get the document text
             const document = editor.document;
@@ -1488,8 +1501,7 @@ export function activate(context: vscode.ExtensionContext) {
             vscode.window.showErrorMessage(`Invalid regex pattern: ${error instanceof Error ? error.message : String(error)}`);
         }
     }));
-
-
+    
     // Register the number sequence replacement command
     context.subscriptions.push(vscode.commands.registerCommand('snippetcreator.replaceWithNumberSequence', async () => {
         // Get the active text editor
