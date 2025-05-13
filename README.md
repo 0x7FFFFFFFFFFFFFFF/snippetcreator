@@ -29,12 +29,14 @@ Create well-formatted code snippets in separate files with ease:
 Quickly select multiple occurrences of text that match a regular expression pattern:
 - Select all matches across your document in a single operation
 - Edit multiple instances simultaneously
+
 ![Regex selection](https://raw.githubusercontent.com//0x7FFFFFFFFFFFFFFF/snippetcreator/main/images/regex_selection.gif)
 
 ### 🔢 Number Sequence Generation
 Replace multiple selections with auto-incremented number sequences:
 - Support for custom starting values and increments
 - Zero-padded number formatting (01, 02, 03...)
+
 ![Number sequence](https://raw.githubusercontent.com//0x7FFFFFFFFFFFFFFF/snippetcreator/main/images/number_sequence.gif)
 
 ### ➗ Mathematical Operations on Numbers
@@ -43,6 +45,7 @@ Perform calculations on numeric portions of text:
 - Support for complex expressions with the selected number as a variable
 - Decimal precision control for formatted output
 - Works with both pure numbers and numbers embedded in text
+
 ![Math operation](https://raw.githubusercontent.com//0x7FFFFFFFFFFFFFFF/snippetcreator/main/images/math_operation.gif)
 
 ### 📏 Text Alignment
@@ -50,12 +53,14 @@ Align text based on specified characters or patterns:
 - Align code by equals signs, colons, or any custom delimiter
 - Support for regex-based alignment points
 - Maintain proper indentation while aligning
+
 ![Regex align](https://raw.githubusercontent.com//0x7FFFFFFFFFFFFFFF/snippetcreator/main/images/regex_align.gif)
 
 ### 🌈 Highlighting
 Highlight different portions of text with vivid colors to improve readability:
 - Multiple distinct highlight colors
 - Persistent highlighting across editing sessions
+
 ![Highlighting](https://raw.githubusercontent.com//0x7FFFFFFFFFFFFFFF/snippetcreator/main/images/highlighting.gif)
 
 ### 🔄 Batch Text Operations
@@ -63,7 +68,6 @@ Store and replay multiple text replacement operations:
 - Save sequences of find/replace operations for future use
 - Export and import operation lists to share with team members
 - Execute complex text transformations with a single command
-
 
 ![Selection to cursors](https://raw.githubusercontent.com//0x7FFFFFFFFFFFFFFF/snippetcreator/main/images/selection_to_cursors.gif)
 ![Toggle between single line selection and cursor](https://raw.githubusercontent.com//0x7FFFFFFFFFFFFFFF/snippetcreator/main/images/toggle_single_line_selection_cursor.gif)
