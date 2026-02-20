@@ -1070,184 +1070,233 @@ export function activate(context: vscode.ExtensionContext) {
         );
     }));
 
-    context.subscriptions.push(vscode.commands.registerCommand('snippetcreator.editReplaceOperation', async () => {
-        // Load operations first
-        loadReplaceOperations(context);
-
-        if (replaceOperations.length === 0) {
-            vscode.window.showInformationMessage("No replacement operations defined. Please create one first.");
-            return;
-        }
-
-        // Show a quick pick of all operations
-        const operationNames = replaceOperations.map(op => op.name);
-        const selectedName = await vscode.window.showQuickPick(operationNames, {
-            placeHolder: 'Select a replace operation to edit'
-        });
-
-        if (!selectedName) return;
-
-        // Find the selected operation
-        const operationIndex = replaceOperations.findIndex(op => op.name === selectedName);
-        if (operationIndex === -1) return;
-
-        const operation = replaceOperations[operationIndex];
-
-        // Create an input string from the current operation
-        let inputString = operation.name;
-
-        for (const op of operation.operations) {
-            // Do NOT escape backslashes for editing - show the original pattern
-            inputString += `{]${op.find}{]${op.replace}`;
-        }
-
-        // Show the input string for editing
-        const editedInput = await vscode.window.showInputBox({
-            prompt: 'Edit operation (use {] or [} as separators)',
-            value: inputString
-        });
-
-        if (!editedInput) return;
-
-        // Parse the edited input
-        const parts = editedInput.split(/\{\]|\[\}/g);
-
-        if (parts.length < 3 || parts.length % 2 !== 1) {
-            vscode.window.showErrorMessage("Invalid format. Please use: name{]find1{]replace1{]find2{]replace2...");
-            return;
-        }
-
-        const newOperationName = parts[0].trim();
-
-        // Check if we're renaming to an existing name
-        if (newOperationName !== operation.name &&
-            replaceOperations.some(op => op.name === newOperationName)) {
-            const overwrite = await vscode.window.showQuickPick(['Yes', 'No'], {
-                placeHolder: `An operation named "${newOperationName}" already exists. Overwrite?`
-            });
-
-            if (overwrite !== 'Yes') return;
-
-            // Remove the existing operation with that name
-            replaceOperations = replaceOperations.filter(op => op.name !== newOperationName);
-        }
-
-        // Update the operation
-        operation.name = newOperationName;
-        operation.operations = [];
-
-        // Add all find/replace pairs
-        for (let i = 1; i < parts.length; i += 2) {
-            if (i + 1 < parts.length) {
-                operation.operations.push({
-                    find: parts[i].trim(),
-                    replace: parts[i + 1].trim()
-                });
-            }
-        }
-
-        // Save the updated operations
-        saveReplaceOperations(context);
-
-        vscode.window.showInformationMessage(
-            `Updated replacement operation "${newOperationName}" with ${operation.operations.length} steps`
-        );
-    }));
 
     context.subscriptions.push(vscode.commands.registerCommand('snippetcreator.listReplaceOperations', async () => {
-        // Load operations first
         loadReplaceOperations(context);
 
-        if (replaceOperations.length === 0) {
-            vscode.window.showInformationMessage("No replacement operations defined.");
-            return;
-        }
-
-        // Create a quick pick with details about each operation
-        const details = replaceOperations.map(op => {
-            return {
-                label: op.name,
-                detail: `${op.operations.length} replacement ${op.operations.length === 1 ? 'step' : 'steps'}`
-            };
-        });
-
-        const selected = await vscode.window.showQuickPick(details, {
-            placeHolder: 'Select an operation to view details',
-        });
-
-        if (!selected) return;
-
-        // Show details for the selected operation
-        const operation = replaceOperations.find(op => op.name === selected.label);
-        if (!operation) return;
-
-        const detailsPanel = vscode.window.createWebviewPanel(
-            'replacementDetails',
-            `Details: ${operation.name}`,
+        // Enable scripts so the webview can post messages back
+        const panel = vscode.window.createWebviewPanel(
+            'replacementOperations',
+            'Replace Operations',
             vscode.ViewColumn.One,
-            {}
+            { enableScripts: true }
         );
 
-        let html = `
-            <html>
-                <head>
-                    <style>
-                        body {
-                            font-family: var(--vscode-font-family);
-                            padding: 20px;
-                        }
-                        h1 {
-                            font-size: 18px;
-                            margin-bottom: 20px;
-                        }
-                        table {
-                            border-collapse: collapse;
-                            width: 100%;
-                        }
-                        th, td {
-                            text-align: left;
-                            padding: 8px;
-                            border: 1px solid var(--vscode-panel-border);
-                        }
-                        th {
-                            background-color: var(--vscode-editor-selectionBackground);
-                        }
-                        pre {
-                            background-color: var(--vscode-editor-background);
-                            padding: 5px;
-                            border-radius: 3px;
-                            overflow-x: auto;
-                        }
-                    </style>
-                </head>
-                <body>
-                    <h1>Replacement Operation: ${operation.name}</h1>
-                    <p>Number of steps: ${operation.operations.length}</p>
-                    <table>
-                        <tr>
-                            <th>#</th>
-                            <th>Find Pattern (Regex)</th>
-                            <th>Replace Pattern</th>
-                        </tr>
-        `;
+        const opsJson = JSON.stringify(replaceOperations);
 
-        operation.operations.forEach((step, i) => {
-            html += `
-                <tr>
-                    <td>${i + 1}</td>
-                    <td><pre>${escapeHtml(step.find)}</pre></td>
-                    <td><pre>${escapeHtml(escapeForDisplay(step.replace))}</pre></td>
-                </tr>
-            `;
-        });
+        panel.webview.html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Replace Operations</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: var(--vscode-font-family);
+    font-size: var(--vscode-font-size);
+    color: var(--vscode-foreground);
+    background: var(--vscode-editor-background);
+    padding: 12px 16px;
+  }
+  h2 { font-size: 1.1em; font-weight: 600; margin-bottom: 10px; }
+  .op-block {
+    border: 1px solid var(--vscode-panel-border);
+    border-radius: 4px;
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+  .op-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px;
+    background: var(--vscode-editor-selectionBackground);
+    border-bottom: 1px solid var(--vscode-panel-border);
+  }
+  .op-name {
+    flex: 1;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--vscode-foreground);
+    font-weight: 600;
+    font-size: 1em;
+    padding: 2px 4px;
+    border-radius: 3px;
+  }
+  .op-name:focus {
+    outline: none;
+    border-color: var(--vscode-focusBorder);
+    background: var(--vscode-input-background);
+  }
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    text-align: left;
+    padding: 3px 6px;
+    font-size: 0.8em;
+    font-weight: 600;
+    color: var(--vscode-disabledForeground);
+    border-bottom: 1px solid var(--vscode-panel-border);
+    background: var(--vscode-sideBar-background);
+  }
+  tbody td { padding: 3px 4px; border-bottom: 1px solid var(--vscode-panel-border); }
+  tbody tr:last-child td { border-bottom: none; }
+  .cell-num { width: 30px; text-align: center; color: var(--vscode-disabledForeground); font-size: 0.85em; }
+  .cell-inp { width: calc(50% - 40px); }
+  .cell-act { width: 50px; text-align: right; }
+  input.val {
+    width: 100%;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--vscode-foreground);
+    font-family: var(--vscode-editor-font-family, monospace);
+    font-size: 0.9em;
+    padding: 2px 4px;
+    border-radius: 3px;
+  }
+  input.val:focus {
+    outline: none;
+    border-color: var(--vscode-focusBorder);
+    background: var(--vscode-input-background);
+  }
+  button {
+    cursor: pointer;
+    border: none;
+    border-radius: 3px;
+    padding: 2px 7px;
+    font-size: 0.82em;
+    background: var(--vscode-button-secondaryBackground);
+    color: var(--vscode-button-secondaryForeground);
+  }
+  button:hover { filter: brightness(1.15); }
+  button.danger { background: var(--vscode-inputValidation-errorBackground); color: var(--vscode-errorForeground); }
+  button.primary {
+    background: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    padding: 3px 10px;
+  }
+  .op-footer {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 8px;
+    background: var(--vscode-sideBar-background);
+    border-top: 1px solid var(--vscode-panel-border);
+  }
+  .toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .save-bar {
+    position: sticky;
+    bottom: 0;
+    background: var(--vscode-editor-background);
+    padding: 8px 0 2px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .status { font-size: 0.85em; color: var(--vscode-disabledForeground); }
+</style>
+</head>
+<body>
+<h2>Replace Operations</h2>
+<div id="ops"></div>
+<div class="save-bar">
+  <button class="primary" onclick="save()">Save All</button>
+  <span class="status" id="status"></span>
+</div>
+<script>
+  const vscode = acquireVsCodeApi();
+  let ops = ${opsJson};
 
-        html += `
-                    </table>
-                </body>
-            </html>
-        `;
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
 
-        detailsPanel.webview.html = html;
+  function render() {
+    const container = document.getElementById('ops');
+    if (ops.length === 0) {
+      container.innerHTML = '<p style="color:var(--vscode-disabledForeground);margin:8px 0">No operations defined.</p>';
+      return;
+    }
+    container.innerHTML = ops.map((op, oi) => {
+      const rows = op.operations.map((step, si) => \`
+        <tr>
+          <td class="cell-num">\${si+1}</td>
+          <td class="cell-inp"><input class="val" data-op="\${oi}" data-step="\${si}" data-field="find" value="\${escHtml(step.find)}" oninput="update(this)"></td>
+          <td class="cell-inp"><input class="val" data-op="\${oi}" data-step="\${si}" data-field="replace" value="\${escHtml(step.replace)}" oninput="update(this)"></td>
+          <td class="cell-act">
+            <button class="danger" onclick="deleteRow(\${oi},\${si})" title="Delete row">x</button>
+          </td>
+        </tr>\`).join('');
+      return \`
+        <div class="op-block">
+          <div class="op-header">
+            <input class="op-name" data-op="\${oi}" data-field="name" value="\${escHtml(op.name)}" oninput="update(this)" title="Operation name">
+            <button class="danger" onclick="deleteOp(\${oi})" title="Delete operation">Delete</button>
+          </div>
+          <table>
+            <thead><tr>
+              <th class="cell-num">#</th>
+              <th class="cell-inp">Find (regex)</th>
+              <th class="cell-inp">Replace</th>
+              <th class="cell-act"></th>
+            </tr></thead>
+            <tbody>\${rows}</tbody>
+          </table>
+          <div class="op-footer">
+            <button onclick="addRow(\${oi})">+ Add step</button>
+          </div>
+        </div>\`;
+    }).join('');
+  }
+
+  function update(el) {
+    const oi = +el.dataset.op;
+    const field = el.dataset.field;
+    if (field === 'name') {
+      ops[oi].name = el.value;
+    } else {
+      const si = +el.dataset.step;
+      ops[oi].operations[si][field] = el.value;
+    }
+  }
+
+  function deleteRow(oi, si) {
+    ops[oi].operations.splice(si, 1);
+    render();
+  }
+
+  function deleteOp(oi) {
+    ops.splice(oi, 1);
+    render();
+  }
+
+  function addRow(oi) {
+    ops[oi].operations.push({ find: '', replace: '' });
+    render();
+    // focus the new find input
+    const tbody = document.querySelectorAll('.op-block')[oi].querySelector('tbody');
+    const lastRow = tbody.lastElementChild;
+    if (lastRow) lastRow.querySelector('input').focus();
+  }
+
+  function save() {
+    // collect current input values (render may not have synced all)
+    document.querySelectorAll('input[data-field]').forEach(el => update(el));
+    vscode.postMessage({ command: 'save', ops });
+    document.getElementById('status').textContent = 'Saved.';
+    setTimeout(() => { document.getElementById('status').textContent = ''; }, 2000);
+  }
+
+  render();
+</script>
+</body>
+</html>`;
+
+        panel.webview.onDidReceiveMessage(msg => {
+            if (msg.command === 'save') {
+                replaceOperations = msg.ops;
+                saveReplaceOperations(context);
+            }
+        }, undefined, context.subscriptions);
     }));
 
     context.subscriptions.push(vscode.commands.registerCommand('snippetcreator.quickReplaceOperation', async () => {
