@@ -1011,64 +1011,6 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.window.showInformationMessage(`Applied "${selectedName}" with ${operation.operations.length} replacement steps`);
     }));
 
-    context.subscriptions.push(vscode.commands.registerCommand('snippetcreator.createReplaceOperation', async () => {
-        // Load operations first
-        loadReplaceOperations(context);
-
-        // Ask for all parameters in one go
-        const input = await vscode.window.showInputBox({
-            prompt: 'Enter operation name{]find pattern{]replace pattern (use {] or [} as separators)',
-            placeHolder: 'e.g., Fix PDF Bookmark{](\\s+)(\\d+)${]\\t$1{]^(\\d+)\\.(\\d+)\\.(\\d+){]\\t\\t$1.$2.$3'
-        });
-
-        if (!input) return;
-
-        // Parse the input using {] or [} as separators
-        const parts = input.split(/\{\]|\[\}/g);
-
-        if (parts.length < 3 || parts.length % 2 !== 1) {
-            vscode.window.showErrorMessage("Invalid format. Please use: name{]find1{]replace1{]find2{]replace2...");
-            return;
-        }
-
-        const operationName = parts[0].trim();
-
-        // Check if name already exists
-        if (replaceOperations.some(op => op.name === operationName)) {
-            const overwrite = await vscode.window.showQuickPick(['Yes', 'No'], {
-                placeHolder: `An operation named "${operationName}" already exists. Overwrite?`
-            });
-
-            if (overwrite !== 'Yes') return;
-
-            // Remove the existing operation
-            replaceOperations = replaceOperations.filter(op => op.name !== operationName);
-        }
-
-        // Create a new operation
-        const newOperation: ReplaceOperation = {
-            name: operationName,
-            operations: []
-        };
-
-        // Add all find/replace pairs
-        for (let i = 1; i < parts.length; i += 2) {
-            if (i + 1 < parts.length) {
-                newOperation.operations.push({
-                    find: parts[i].trim(),
-                    replace: parts[i + 1].trim()
-                });
-            }
-        }
-
-        // Save the operation
-        replaceOperations.push(newOperation);
-        saveReplaceOperations(context);
-
-        vscode.window.showInformationMessage(
-            `Created replacement operation "${operationName}" with ${newOperation.operations.length} steps`
-        );
-    }));
 
 
     context.subscriptions.push(vscode.commands.registerCommand('snippetcreator.listReplaceOperations', async () => {
@@ -1077,9 +1019,9 @@ export function activate(context: vscode.ExtensionContext) {
         // Enable scripts so the webview can post messages back
         const panel = vscode.window.createWebviewPanel(
             'replacementOperations',
-            'Replace Operations',
+            'Replace Operations Management',
             vscode.ViewColumn.One,
-            { enableScripts: true }
+            { enableScripts: true, retainContextWhenHidden: true }
         );
 
         const opsJson = JSON.stringify(replaceOperations);
@@ -1089,7 +1031,7 @@ export function activate(context: vscode.ExtensionContext) {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Replace Operations</title>
+<title>Replace Operations Management</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -1100,6 +1042,35 @@ export function activate(context: vscode.ExtensionContext) {
     padding: 12px 16px;
   }
   h2 { font-size: 1.1em; font-weight: 600; margin-bottom: 10px; }
+  h3 { font-size: 0.95em; font-weight: 600; margin-bottom: 8px; color: var(--vscode-foreground); }
+  .new-op-block {
+    border: 1px solid var(--vscode-focusBorder);
+    border-radius: 4px;
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+  code {
+    padding: 0 0.3rem;
+  }
+  .new-op-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: var(--vscode-editor-selectionHighlightBackground, var(--vscode-editor-selectionBackground));
+    border-bottom: 1px solid var(--vscode-focusBorder);
+  }
+  .new-op-header label { font-size: 0.85em; font-weight: 600; white-space: nowrap; color: var(--vscode-disabledForeground); }
+  .new-op-name {
+    flex: 1;
+    background: var(--vscode-input-background);
+    border: 1px solid var(--vscode-input-border, transparent);
+    color: var(--vscode-input-foreground);
+    font-size: 1em;
+    padding: 3px 6px;
+    border-radius: 3px;
+  }
+  .new-op-name:focus { outline: none; border-color: var(--vscode-focusBorder); }
   .op-block {
     border: 1px solid var(--vscode-panel-border);
     border-radius: 4px;
@@ -1182,6 +1153,14 @@ export function activate(context: vscode.ExtensionContext) {
     background: var(--vscode-sideBar-background);
     border-top: 1px solid var(--vscode-panel-border);
   }
+  .new-op-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 8px;
+    background: var(--vscode-sideBar-background);
+    border-top: 1px solid var(--vscode-focusBorder);
+  }
   .toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
   .save-bar {
     position: sticky;
@@ -1193,10 +1172,45 @@ export function activate(context: vscode.ExtensionContext) {
     align-items: center;
   }
   .status { font-size: 0.85em; color: var(--vscode-disabledForeground); }
+  .err { font-size: 0.85em; color: var(--vscode-errorForeground); margin-left: 8px; }
+  .section-label {
+    font-size: 0.78em;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--vscode-disabledForeground);
+    margin: 14px 0 6px;
+  }
 </style>
 </head>
 <body>
-<h2>Replace Operations</h2>
+<h2>Replace Operations Management</h2>
+
+<!-- New Operation Form -->
+<div class="new-op-block">
+  <div class="new-op-header">
+    <label for="newOpName">New Operation:</label>
+    <input id="newOpName" class="new-op-name" placeholder="Operation name" />
+  </div>
+  <table id="newOpTable">
+    <thead><tr>
+      <th class="cell-num">#</th>
+      <th class="cell-inp">Find (regex)</th>
+      <th class="cell-inp">Replace</th>
+      <th class="cell-act"></th>
+    </tr></thead>
+    <tbody id="newOpRows"></tbody>
+  </table>
+  <div class="new-op-footer">
+    <button onclick="addNewRow()">+ Add step</button>
+    <div style="display:flex;align-items:center;gap:6px">
+      <span class="err" id="newErr"></span>
+      <button class="primary" onclick="addOperation()">Add Operation</button>
+    </div>
+  </div>
+</div>
+
+<div class="section-label">Existing Operations</div>
 <div id="ops"></div>
 <div class="save-bar">
   <button class="primary" onclick="save()">Save All</button>
@@ -1206,6 +1220,59 @@ export function activate(context: vscode.ExtensionContext) {
   const vscode = acquireVsCodeApi();
   let ops = ${opsJson};
 
+  // ── New-operation form state ──────────────────────────────────────────
+  let newSteps = [{ find: '', replace: '' }];
+
+  function renderNewRows() {
+    const tbody = document.getElementById('newOpRows');
+    tbody.innerHTML = newSteps.map((s, i) => \`
+      <tr>
+        <td class="cell-num">\${i+1}</td>
+        <td class="cell-inp"><input class="val" id="nf\${i}" value="\${escHtml(s.find)}"
+          oninput="newSteps[\${i}].find=this.value" placeholder="find…"></td>
+        <td class="cell-inp"><input class="val" id="nr\${i}" value="\${escHtml(s.replace)}"
+          oninput="newSteps[\${i}].replace=this.value" placeholder="replace…"></td>
+        <td class="cell-act"><button class="danger" onclick="deleteNewRow(\${i})" title="Remove row">x</button></td>
+      </tr>\`).join('');
+  }
+
+  function addNewRow() {
+    newSteps.push({ find: '', replace: '' });
+    renderNewRows();
+    document.getElementById('nf' + (newSteps.length-1)).focus();
+  }
+
+  function deleteNewRow(i) {
+    if (newSteps.length === 1) { newSteps[0] = { find: '', replace: '' }; }
+    else { newSteps.splice(i, 1); }
+    renderNewRows();
+  }
+
+  function addOperation() {
+    const nameEl = document.getElementById('newOpName');
+    const errEl = document.getElementById('newErr');
+    const name = nameEl.value.trim();
+    if (!name) { errEl.textContent = 'Name is required.'; nameEl.focus(); return; }
+    if (ops.some(o => o.name === name)) { errEl.textContent = 'Name already exists.'; nameEl.focus(); return; }
+    const validSteps = newSteps.filter(s => s.find.trim() !== '');
+    if (validSteps.length === 0) {
+      errEl.textContent = 'At least one Find pattern is required.';
+      document.getElementById('nf0').focus();
+      return;
+    }
+    errEl.textContent = '';
+    ops.push({ name, operations: validSteps.map(s => ({ find: s.find, replace: s.replace })) });
+    // reset form
+    nameEl.value = '';
+    newSteps = [{ find: '', replace: '' }];
+    renderNewRows();
+    render();
+    // auto-save
+    vscode.postMessage({ command: 'save', ops });
+    setStatus('Operation added and saved.');
+  }
+
+  // ── Existing operations ───────────────────────────────────────────────
   function escHtml(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
@@ -1213,39 +1280,35 @@ export function activate(context: vscode.ExtensionContext) {
   function render() {
     const container = document.getElementById('ops');
     if (ops.length === 0) {
-      container.innerHTML = '<p style="color:var(--vscode-disabledForeground);margin:8px 0">No operations defined.</p>';
+      container.innerHTML = '<p style="color:var(--vscode-disabledForeground);margin:8px 0">No operations defined yet.</p>';
       return;
     }
-    container.innerHTML = ops.map((op, oi) => {
-      const rows = op.operations.map((step, si) => \`
-        <tr>
-          <td class="cell-num">\${si+1}</td>
-          <td class="cell-inp"><input class="val" data-op="\${oi}" data-step="\${si}" data-field="find" value="\${escHtml(step.find)}" oninput="update(this)"></td>
-          <td class="cell-inp"><input class="val" data-op="\${oi}" data-step="\${si}" data-field="replace" value="\${escHtml(step.replace)}" oninput="update(this)"></td>
-          <td class="cell-act">
-            <button class="danger" onclick="deleteRow(\${oi},\${si})" title="Delete row">x</button>
-          </td>
-        </tr>\`).join('');
-      return \`
-        <div class="op-block">
-          <div class="op-header">
-            <input class="op-name" data-op="\${oi}" data-field="name" value="\${escHtml(op.name)}" oninput="update(this)" title="Operation name">
-            <button class="danger" onclick="deleteOp(\${oi})" title="Delete operation">Delete</button>
-          </div>
-          <table>
-            <thead><tr>
-              <th class="cell-num">#</th>
-              <th class="cell-inp">Find (regex)</th>
-              <th class="cell-inp">Replace</th>
-              <th class="cell-act"></th>
-            </tr></thead>
-            <tbody>\${rows}</tbody>
-          </table>
-          <div class="op-footer">
-            <button onclick="addRow(\${oi})">+ Add step</button>
-          </div>
-        </div>\`;
-    }).join('');
+    container.innerHTML = ops.map((op, oi) => \`
+      <div class="op-block">
+        <div class="op-header">
+          <input class="op-name" data-op="\${oi}" data-field="name" value="\${escHtml(op.name)}" oninput="update(this)" title="Operation name">
+          <button class="danger" onclick="deleteOp(\${oi})" title="Delete operation">Delete</button>
+        </div>
+        <table>
+          <thead><tr>
+            <th class="cell-num">#</th>
+            <th class="cell-inp">Find (regex)</th>
+            <th class="cell-inp">Replace</th>
+            <th class="cell-act"></th>
+          </tr></thead>
+          <tbody>\${op.operations.map((step, si) => \`
+            <tr>
+              <td class="cell-num">\${si+1}</td>
+              <td class="cell-inp"><input class="val" data-op="\${oi}" data-step="\${si}" data-field="find" value="\${escHtml(step.find)}" oninput="update(this)"></td>
+              <td class="cell-inp"><input class="val" data-op="\${oi}" data-step="\${si}" data-field="replace" value="\${escHtml(step.replace)}" oninput="update(this)"></td>
+              <td class="cell-act"><button class="danger" onclick="deleteRow(\${oi},\${si})" title="Delete row">x</button></td>
+            </tr>\`).join('')}
+          </tbody>
+        </table>
+        <div class="op-footer">
+          <button onclick="addRow(\${oi})">+ Add step</button>
+        </div>
+      </div>\`).join('');
   }
 
   function update(el) {
@@ -1278,16 +1341,57 @@ export function activate(context: vscode.ExtensionContext) {
     if (lastRow) lastRow.querySelector('input').focus();
   }
 
+  function setStatus(msg) {
+    const el = document.getElementById('status');
+    el.textContent = msg;
+    setTimeout(() => { el.textContent = ''; }, 2500);
+  }
+
   function save() {
     // collect current input values (render may not have synced all)
     document.querySelectorAll('input[data-field]').forEach(el => update(el));
     vscode.postMessage({ command: 'save', ops });
-    document.getElementById('status').textContent = 'Saved.';
-    setTimeout(() => { document.getElementById('status').textContent = ''; }, 2000);
+    setStatus('Saved.');
   }
 
+  // init
+  renderNewRows();
   render();
 </script>
+
+<!-- Regex Help -->
+<div style="margin-top:20px;border-top:1px solid var(--vscode-panel-border);padding-top:12px;">
+  <div class="section-label" style="margin-top:0">Regex Reference</div>
+  <table style="width:100%;border-collapse:collapse;margin-top:6px;font-size:0.85em;">
+    <thead>
+      <tr>
+        <th style="text-align:left;padding:3px 8px;color:var(--vscode-disabledForeground);border-bottom:1px solid var(--vscode-panel-border);width:50%">Find field (regex)</th>
+        <th style="text-align:left;padding:3px 8px;color:var(--vscode-disabledForeground);border-bottom:1px solid var(--vscode-panel-border);width:50%">Replace field</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="padding:3px 8px;border-bottom:1px solid var(--vscode-panel-border);vertical-align:top;color:var(--vscode-foreground);font-family:var(--vscode-editor-font-family,monospace)">
+          <code>(\\w+)</code> — capture group<br>
+          <code>\\1</code>, <code>\\2</code> — backreference to group 1, 2<br>
+          <code>(?:…)</code> — non-capturing group<br>
+          <code>(?i)</code> — case-insensitive flag<br>
+          <code>^</code>, <code>$</code> — line start / end (multiline on)<br>
+          <code>\\d</code> <code>\\w</code> <code>\\s</code> — digit, word, space
+        </td>
+        <td style="padding:3px 8px;border-bottom:1px solid var(--vscode-panel-border);vertical-align:top;color:var(--vscode-foreground);font-family:var(--vscode-editor-font-family,monospace)">
+          <code>$1</code>, <code>$2</code> — capture group 1, 2<br>
+          <code>$&</code> — the entire matched text<br>
+          <code>$\`</code> — text before match<br>
+          <code>$'</code> — text after match<br>
+          <code>\\n</code>, <code>\\t</code> — newline, tab<br>
+          <code>\\</code> — literal backslash
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
 </body>
 </html>`;
 
@@ -1299,107 +1403,6 @@ export function activate(context: vscode.ExtensionContext) {
         }, undefined, context.subscriptions);
     }));
 
-    context.subscriptions.push(vscode.commands.registerCommand('snippetcreator.quickReplaceOperation', async () => {
-        // Get the active editor
-        const editor = vscode.window.activeTextEditor;
-        if (!editor) {
-            vscode.window.showErrorMessage("No active editor");
-            return;
-        }
-
-        // Ask for all parameters in one go
-        const input = await vscode.window.showInputBox({
-            prompt: 'Enter find pattern{]replace pattern (use {] or [} as separators)',
-            placeHolder: 'e.g., (\\s+)(\\d+)${]\\t$1'
-        });
-
-        if (!input) return;
-
-        // Parse the input using {] or [} as separators
-        const parts = input.split(/\{\]|\[\}/g);
-
-        if (parts.length < 2) {
-            vscode.window.showErrorMessage("Invalid format. Please use: find{]replace");
-            return;
-        }
-
-        // Determine range: selection if exists, otherwise full document
-        let range: vscode.Range;
-        const selection = editor.selection;
-
-        if (!selection.isEmpty) {
-            // Use selection
-            range = selection;
-        } else {
-            // Use full document
-            const document = editor.document;
-            const fullText = document.getText();
-            range = new vscode.Range(
-                document.positionAt(0),
-                document.positionAt(fullText.length)
-            );
-        }
-
-        // Get text to process
-        const document = editor.document;
-        const textToProcess = document.getText(range);
-
-        // Apply each find/replace pair in sequence
-        let currentText = textToProcess;
-
-        for (let i = 0; i < parts.length - 1; i += 2) {
-            try {
-                const find = parts[i].trim();
-                const replace = parts[i + 1].trim();
-
-                // Use regex replace
-                const regex = new RegExp(find, 'gm');
-                currentText = currentText.replace(regex, processReplacement(replace));
-            } catch (error) {
-                vscode.window.showErrorMessage(`Error in replacement: ${error}`);
-                return;
-            }
-        }
-
-        // Apply the final result
-        await editor.edit(editBuilder => {
-            editBuilder.replace(range, currentText);
-        });
-
-        const stepsCount = Math.floor(parts.length / 2);
-        vscode.window.showInformationMessage(`Applied ${stepsCount} replacement ${stepsCount === 1 ? 'step' : 'steps'}`);
-    }));
-
-    context.subscriptions.push(vscode.commands.registerCommand('snippetcreator.deleteReplaceOperation', async () => {
-        // Load operations first
-        loadReplaceOperations(context);
-
-        if (replaceOperations.length === 0) {
-            vscode.window.showInformationMessage("No replacement operations defined.");
-            return;
-        }
-
-        // Show a quick pick of all operations
-        const operationNames = replaceOperations.map(op => op.name);
-        const selectedName = await vscode.window.showQuickPick(operationNames, {
-            placeHolder: 'Select a replace operation to delete'
-        });
-
-        if (!selectedName) return;
-
-        // Confirm deletion
-        const confirmDelete = await vscode.window.showQuickPick(['Yes', 'No'], {
-            placeHolder: `Delete operation "${selectedName}"?`
-        });
-
-        if (confirmDelete !== 'Yes') return;
-
-        // Delete the operation
-        replaceOperations = replaceOperations.filter(op => op.name !== selectedName);
-        saveReplaceOperations(context);
-
-        vscode.window.showInformationMessage(`Deleted operation "${selectedName}"`);
-    }));
 
     // Export operations to a file
     context.subscriptions.push(vscode.commands.registerCommand('snippetcreator.exportReplaceOperations', async () => {
