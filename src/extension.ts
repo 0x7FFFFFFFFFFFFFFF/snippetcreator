@@ -99,30 +99,30 @@ function processNumberOperation(text: string, operation: string): string {
     // Simple operations like +5, -10, *2, /3
     const simpleOpRegex = /^([+\-*/])(\d*\.?\d+)$/;
     const simpleMatch = operation.match(simpleOpRegex);
-    
+
     // Check for decimal precision specifier at the end (//n)
     const hasPrecisionSpecifier = operation.match(/\/\/(\d+)$/);
     const precision = hasPrecisionSpecifier ? parseInt(hasPrecisionSpecifier[1], 10) : null;
-    
+
     // Remove precision specifier for processing
     let operationWithoutPrecision = operation;
     if (hasPrecisionSpecifier) {
         operationWithoutPrecision = operation.replace(/\/\/\d+$/, '');
     }
-    
+
     // Find all numbers in the text
     const numberRegex = /-?\d+(\.\d+)?/g;
-    
+
     // If the entire text is a number, process it
     if (text.trim().match(/^-?\d+(\.\d+)?$/)) {
         const num = parseFloat(text);
         let result: number;
-        
+
         if (simpleMatch) {
             // Handle simple operations
             const operator = simpleMatch[1];
             const operand = parseFloat(simpleMatch[2]);
-            
+
             switch (operator) {
                 case '+': result = num + operand; break;
                 case '-': result = num - operand; break;
@@ -134,11 +134,11 @@ function processNumberOperation(text: string, operation: string): string {
             // Handle complex expressions
             // Replace $ with the actual number
             const expr = operationWithoutPrecision.replace(/\$/g, num.toString());
-            
+
             try {
                 // Use Function constructor to evaluate the expression safely
                 result = Function(`'use strict'; return (${expr})`)();
-                
+
                 if (typeof result !== 'number' || !isFinite(result)) {
                     throw new Error('Expression did not evaluate to a valid number');
                 }
@@ -148,12 +148,12 @@ function processNumberOperation(text: string, operation: string): string {
                 throw new Error(`Invalid expression: ${errorMessage}`);
             }
         }
-        
+
         // Format the result based on precision
         if (precision !== null) {
             return result.toFixed(precision);
         }
-        
+
         // Return the result as a string
         return result.toString();
     } else {
@@ -161,12 +161,12 @@ function processNumberOperation(text: string, operation: string): string {
         return text.replace(numberRegex, (match) => {
             const num = parseFloat(match);
             let result: number;
-            
+
             if (simpleMatch) {
                 // Handle simple operations
                 const operator = simpleMatch[1];
                 const operand = parseFloat(simpleMatch[2]);
-                
+
                 switch (operator) {
                     case '+': result = num + operand; break;
                     case '-': result = num - operand; break;
@@ -178,11 +178,11 @@ function processNumberOperation(text: string, operation: string): string {
                 // Handle complex expressions
                 // Replace $ with the actual number
                 const expr = operationWithoutPrecision.replace(/\$/g, num.toString());
-                
+
                 try {
                     // Use Function constructor to evaluate the expression safely
                     result = Function(`'use strict'; return (${expr})`)();
-                    
+
                     if (typeof result !== 'number' || !isFinite(result)) {
                         throw new Error('Expression did not evaluate to a valid number');
                     }
@@ -192,12 +192,12 @@ function processNumberOperation(text: string, operation: string): string {
                     throw new Error(`Invalid expression: ${errorMessage}`);
                 }
             }
-            
+
             // Format the result based on precision
             if (precision !== null) {
                 return result.toFixed(precision);
             }
-            
+
             // Return the result as a string
             return result.toString();
         });
@@ -1234,7 +1234,7 @@ export function activate(context: vscode.ExtensionContext) {
         operation.operations.forEach((step, i) => {
             html += `
                 <tr>
-                    <td>${i+1}</td>
+                    <td>${i + 1}</td>
                     <td><pre>${escapeHtml(step.find)}</pre></td>
                     <td><pre>${escapeHtml(escapeForDisplay(step.replace))}</pre></td>
                 </tr>
@@ -1459,7 +1459,7 @@ export function activate(context: vscode.ExtensionContext) {
             // Extract flags if the pattern starts with (?flags)
             let flags = 'g'; // Always include 'g' flag for global matching
             const flagsMatch = regexPattern.match(/^\(\?([dgimsuvy]+)\)(.*)/);
-            
+
             if (flagsMatch) {
                 // Get unique flags (removing duplicates)
                 const uniqueFlags = [...new Set(flagsMatch[1])].join('');
@@ -1501,7 +1501,7 @@ export function activate(context: vscode.ExtensionContext) {
             vscode.window.showErrorMessage(`Invalid regex pattern: ${error instanceof Error ? error.message : String(error)}`);
         }
     }));
-    
+
     // Register the number sequence replacement command
     context.subscriptions.push(vscode.commands.registerCommand('snippetcreator.replaceWithNumberSequence', async () => {
         // Get the active text editor
@@ -1510,41 +1510,41 @@ export function activate(context: vscode.ExtensionContext) {
             vscode.window.showInformationMessage('No editor is active');
             return;
         }
-        
+
         // Check if there are multiple selections
         if (editor.selections.length <= 1) {
             vscode.window.showInformationMessage('This command requires multiple selections.');
             return;
         }
-        
+
         // Ask for start number and step
         const sequenceInput = await vscode.window.showInputBox({
             placeHolder: '1',
             prompt: 'Enter start number and step (e.g., "1", "01", "001", or "5 2" for start=5,step=2)'
         });
-        
+
         // Exit if user canceled
         if (sequenceInput === undefined) {
             return;
         }
-        
+
         try {
             // Parse input
             const parts = sequenceInput.trim() === '' ? ['1'] : sequenceInput.split(/\s+/);
             const startValueStr = parts[0] || '1';
             const step = parts.length > 1 ? parseInt(parts[1], 10) : 1;
-            
+
             // Parse the start number and determine format
             const startNumber = parseInt(startValueStr, 10);
-            
+
             if (isNaN(startNumber) || isNaN(step)) {
                 throw new Error('Invalid number format');
             }
-            
+
             // Determine if zero-padding is needed and how many digits
             const hasPadding = startValueStr.match(/^0+\d/);
             const totalWidth = hasPadding ? startValueStr.length : 0;
-            
+
             // Sort selections by position to ensure consistent numbering regardless of selection order
             const sortedSelections = [...editor.selections].sort((a, b) => {
                 if (a.start.line !== b.start.line) {
@@ -1552,12 +1552,12 @@ export function activate(context: vscode.ExtensionContext) {
                 }
                 return a.start.character - b.start.character;
             });
-            
+
             // Replace each selection with the appropriate number in the sequence
             await editor.edit(editBuilder => {
                 sortedSelections.forEach((selection, index) => {
                     const number = startNumber + (index * step);
-                    
+
                     // Format the number with appropriate padding if needed
                     let formattedNumber;
                     if (hasPadding) {
@@ -1565,11 +1565,11 @@ export function activate(context: vscode.ExtensionContext) {
                     } else {
                         formattedNumber = number.toString();
                     }
-                    
+
                     editBuilder.replace(selection, formattedNumber);
                 });
             });
-            
+
         } catch (error) {
             vscode.window.showErrorMessage(`Error: ${error instanceof Error ? error.message : String(error)}`);
         }
@@ -1583,24 +1583,24 @@ export function activate(context: vscode.ExtensionContext) {
             vscode.window.showInformationMessage('No editor is active');
             return;
         }
-        
+
         // Check if there are selections
         if (editor.selections.length < 1) {
             vscode.window.showInformationMessage('This command requires at least one selection.');
             return;
         }
-        
+
         // Ask for the operation to perform
         const operation = await vscode.window.showInputBox({
             placeHolder: '+1, *2, /3, ($ + 10) / 2, ($ * 2.5)//3',
             prompt: 'Enter operation to perform on numbers (use $ to reference the number)'
         });
-        
+
         // Exit if user canceled
         if (operation === undefined) {
             return;
         }
-        
+
         try {
             // Wait for edit to complete
             await editor.edit(editBuilder => {
@@ -1608,15 +1608,15 @@ export function activate(context: vscode.ExtensionContext) {
                 for (const selection of editor.selections) {
                     // Get the selected text
                     const selectionText = editor.document.getText(selection);
-                    
+
                     // Find numbers in the selection
                     const result = processNumberOperation(selectionText, operation);
-                    
+
                     // Replace the selection with the result
                     editBuilder.replace(selection, result);
                 }
             });
-            
+
         } catch (error) {
             vscode.window.showErrorMessage(`Error: ${error instanceof Error ? error.message : String(error)}`);
         }
@@ -1629,10 +1629,10 @@ export function activate(context: vscode.ExtensionContext) {
             vscode.window.showInformationMessage('No editor is active');
             return;
         }
-        
+
         const document = editor.document;
         const selections = editor.selections;
-        
+
         if (selections.length === 1 && selections[0].isEmpty) {
             // Case 1: No selection and only one cursor - select the whole line
             const lineNumber = selections[0].active.line;
@@ -1642,39 +1642,225 @@ export function activate(context: vscode.ExtensionContext) {
                 new vscode.Position(lineNumber, line.text.length)
             );
             editor.selection = newSelection;
-        } else if (selections.length === 1 && !selections[0].isEmpty && 
-                selections[0].start.line !== selections[0].end.line) {
+        } else if (selections.length === 1 && !selections[0].isEmpty &&
+            selections[0].start.line !== selections[0].end.line) {
             // Case 2: Multiline selection - create cursors at the end of each line
             const startLine = selections[0].start.line;
             const endLine = selections[0].end.line;
             const newSelections: vscode.Selection[] = [];
-            
+
             for (let i = startLine; i <= endLine; i++) {
                 const line = document.lineAt(i);
                 const position = new vscode.Position(i, line.text.length);
                 newSelections.push(new vscode.Selection(position, position));
             }
-            
+
             editor.selections = newSelections;
         } else {
             // Case 3: Multiple cursors already - move them to end of line
             const newSelections: vscode.Selection[] = [];
-            
+
             for (const selection of selections) {
                 const lineNumber = selection.active.line;
                 const line = document.lineAt(lineNumber);
                 const position = new vscode.Position(lineNumber, line.text.length);
                 newSelections.push(new vscode.Selection(position, position));
             }
-            
+
             editor.selections = newSelections;
+        }
+    }));
+
+    // ── Bracket / Quote Select (Ctrl+Q) ──────────────────────────────────────
+    // State per editor URI
+    interface BracketSelectState {
+        // The *original* selections recorded on the very first press
+        originalSelections: readonly vscode.Selection[];
+        // Data per cursor that found a valid bracket pair
+        cursorsData: {
+            openOff: number;
+            closeOff: number;
+            origIndex: number;
+            // The sequence of 6 indices to cycle through. 
+            // [0] is origIndex. [1]..[5] are the other indices in order 0..5.
+            cycleIndices: number[];
+        }[];
+        // Which step in the cycle are we on? (0 to 6)
+        step: number;
+        // The selections we last applied — used to detect if user moved away
+        lastAppliedSelections: { anchor: number; active: number }[];
+    }
+
+    const OPEN_CHARS = ['"', "'", '(', '[', '{', '<'];
+    const CLOSE_CHARS = ['"', "'", ')', ']', '}', '>'];
+
+    const bracketSelectStates = new Map<string, BracketSelectState>();
+
+    function scanNaturalPair(
+        text: string,
+        cursorOffset: number
+    ): { openOff: number; closeOff: number; origIndex: number } | null {
+        let openOff = -1;
+        let origIndex = -1;
+        // Find nearest open char of any type to the left of cursor
+        for (let i = cursorOffset - 1; i >= 0; i--) {
+            const idx = OPEN_CHARS.indexOf(text[i]);
+            if (idx !== -1) {
+                openOff = i;
+                origIndex = idx;
+                break;
+            }
+        }
+        if (openOff === -1) return null;
+
+        const closeChar = CLOSE_CHARS[origIndex];
+        let closeOff = -1;
+        // Find nearest matching close char to the right of cursor
+        for (let i = cursorOffset; i < text.length; i++) {
+            if (text[i] === closeChar) {
+                closeOff = i;
+                break;
+            }
+        }
+        if (closeOff === -1) return null;
+
+        return { openOff, closeOff, origIndex };
+    }
+
+    function selectionsMatch(
+        editor: vscode.TextEditor,
+        stored: { anchor: number; active: number }[]
+    ): boolean {
+        const doc = editor.document;
+        const current = editor.selections;
+        if (current.length !== stored.length) return false;
+        return stored.every((s, i) =>
+            doc.offsetAt(current[i].anchor) === s.anchor &&
+            doc.offsetAt(current[i].active) === s.active
+        );
+    }
+
+    context.subscriptions.push(vscode.commands.registerCommand('snippetcreator.bracketSelect', () => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) return;
+
+        const doc = editor.document;
+        const text = doc.getText();
+        const editorId = doc.uri.toString();
+
+        const currentSelections = editor.selections;
+
+        let state = bracketSelectStates.get(editorId);
+
+        // ── Detect if we're continuing a cycle or starting fresh ─────────────
+        const isContinuing = state !== undefined &&
+            selectionsMatch(editor, state.lastAppliedSelections);
+
+        if (!isContinuing) {
+            // ── Fresh start ───────────────────────────────────────────────────
+            const cursorsData: BracketSelectState['cursorsData'] = [];
+
+            for (const sel of currentSelections) {
+                const cursorOffset = doc.offsetAt(sel.start);
+                const pair = scanNaturalPair(text, cursorOffset);
+                if (pair) {
+                    const cycleIndices = [pair.origIndex];
+                    for (let i = 0; i < OPEN_CHARS.length; i++) {
+                        if (i !== pair.origIndex) cycleIndices.push(i);
+                    }
+                    cursorsData.push({
+                        openOff: pair.openOff,
+                        closeOff: pair.closeOff,
+                        origIndex: pair.origIndex,
+                        cycleIndices
+                    });
+                }
+            }
+
+            if (cursorsData.length === 0) return; // Nothing to target
+
+            state = {
+                originalSelections: currentSelections,
+                cursorsData,
+                step: 0,
+                lastAppliedSelections: []
+            };
+            bracketSelectStates.set(editorId, state);
+        }
+
+        if (!state) return;
+
+        // ── Main state machine ────────────────────────────────────────────────
+
+        if (state.step === 0) {
+            // Step 0: Just select text inside the original brackets
+            const newSelections = state.cursorsData.map(c =>
+                new vscode.Selection(doc.positionAt(c.openOff + 1), doc.positionAt(c.closeOff))
+            );
+            editor.selections = newSelections;
+            state.lastAppliedSelections = newSelections.map(s => ({
+                anchor: doc.offsetAt(s.anchor),
+                active: doc.offsetAt(s.active)
+            }));
+            state.step = 1;
+        }
+        else if (state.step >= 1 && state.step <= 5) {
+            // Step 1-5: Replace brackets with the next type in the sequence
+            const stepIndex = state.step;
+            editor.edit(editBuilder => {
+                for (const c of state!.cursorsData) {
+                    const bracketIdx = c.cycleIndices[stepIndex];
+                    editBuilder.replace(
+                        new vscode.Range(doc.positionAt(c.openOff), doc.positionAt(c.openOff + 1)),
+                        OPEN_CHARS[bracketIdx]
+                    );
+                    editBuilder.replace(
+                        new vscode.Range(doc.positionAt(c.closeOff), doc.positionAt(c.closeOff + 1)),
+                        CLOSE_CHARS[bracketIdx]
+                    );
+                }
+            }).then(success => {
+                if (success) {
+                    // Re-apply selections (to ensure they stay strictly inside)
+                    const newSelections = state!.cursorsData.map(c =>
+                        new vscode.Selection(doc.positionAt(c.openOff + 1), doc.positionAt(c.closeOff))
+                    );
+                    editor.selections = newSelections;
+                    state!.lastAppliedSelections = newSelections.map(s => ({
+                        anchor: doc.offsetAt(s.anchor),
+                        active: doc.offsetAt(s.active)
+                    }));
+                    state!.step++;
+                }
+            });
+        }
+        else if (state.step === 6) {
+            // Step 6: Restore original brackets and original cursor/selection
+            editor.edit(editBuilder => {
+                for (const c of state!.cursorsData) {
+                    const bracketIdx = c.origIndex;
+                    editBuilder.replace(
+                        new vscode.Range(doc.positionAt(c.openOff), doc.positionAt(c.openOff + 1)),
+                        OPEN_CHARS[bracketIdx]
+                    );
+                    editBuilder.replace(
+                        new vscode.Range(doc.positionAt(c.closeOff), doc.positionAt(c.closeOff + 1)),
+                        CLOSE_CHARS[bracketIdx]
+                    );
+                }
+            }).then(success => {
+                if (success) {
+                    editor.selections = [...state!.originalSelections];
+                    bracketSelectStates.delete(editorId);
+                }
+            });
         }
     }));
 }
 
 function writeToFile(folder: any, filename: any, content: any) {
     // Remove invalid file name characters
-    filename = filename.replace(/[/\\?%*:|"<>]/g, "").replace(/\s{2,}/g, " ");
+    filename = filename.replace(/[/\\?%*:"|<>]/g, "").replace(/\s{2,}/g, " ");
     var writeStream = fs.createWriteStream(path.join(folder, filename));
     writeStream.write(content);
     writeStream.end();

@@ -24,8 +24,7 @@
         "snippets"
     ],
     "icon": "images/icon.png",
-    "activationEvents": [
-    ],
+    "activationEvents": [],
     "main": "./out/extension.js",
     "contributes": {
         "commands": [
@@ -118,7 +117,6 @@
                 "command": "snippetcreator.selectByRegex",
                 "title": "Select All Regex Matches",
                 "category": "SnippetCreator"
-
             },
             {
                 "command": "snippetcreator.replaceWithNumberSequence",
@@ -131,6 +129,11 @@
             {
                 "command": "snippetcreator.lineOperation",
                 "title": "Line Operation (Select/Cursors)"
+            },
+            {
+                "command": "snippetcreator.bracketSelect",
+                "title": "Bracket/Quote Select (Cycle)",
+                "category": "SnippetCreator"
             }
         ],
         "keybindings": [
@@ -178,6 +181,11 @@
                 "command": "snippetcreator.operateOnNumbers",
                 "key": "ctrl+shift+m",
                 "when": "editorHasMultipleSelections"
+            },
+            {
+                "command": "snippetcreator.bracketSelect",
+                "key": "ctrl+q",
+                "when": "editorTextFocus"
             }
         ],
         "snippets": [
