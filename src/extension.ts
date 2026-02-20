@@ -1681,12 +1681,15 @@ export function activate(context: vscode.ExtensionContext) {
             openOff: number;
             closeOff: number;
             origIndex: number;
-            // The sequence of 6 indices to cycle through. 
+            // The sequence of 6 indices to cycle through.
             // [0] is origIndex. [1]..[5] are the other indices in order 0..5.
             cycleIndices: number[];
         }[];
-        // Which step in the cycle are we on? (0 to 6)
+        // Which step in the cycle are we on? (0 to 7)
+        // 0=select, 1-5=replace with bracket types, 6=remove brackets, 7=restore
         step: number;
+        // True when the brackets have been physically deleted from the document
+        bracketsRemoved: boolean;
         // The selections we last applied — used to detect if user moved away
         lastAppliedSelections: { anchor: number; active: number }[];
     }
@@ -1783,6 +1786,7 @@ export function activate(context: vscode.ExtensionContext) {
                 originalSelections: currentSelections,
                 cursorsData,
                 step: 0,
+                bracketsRemoved: false,
                 lastAppliedSelections: []
             };
             bracketSelectStates.set(editorId, state);
@@ -1805,23 +1809,35 @@ export function activate(context: vscode.ExtensionContext) {
             state.step = 1;
         }
         else if (state.step >= 1 && state.step <= 5) {
-            // Step 1-5: Replace brackets with the next type in the sequence
+            // Step 1-5: Apply next bracket type.
+            // If brackets were removed, we INSERT them; otherwise REPLACE the existing ones.
             const stepIndex = state.step;
+            const wasRemoved = state.bracketsRemoved;
             editor.edit(editBuilder => {
                 for (const c of state!.cursorsData) {
                     const bracketIdx = c.cycleIndices[stepIndex];
-                    editBuilder.replace(
-                        new vscode.Range(doc.positionAt(c.openOff), doc.positionAt(c.openOff + 1)),
-                        OPEN_CHARS[bracketIdx]
-                    );
-                    editBuilder.replace(
-                        new vscode.Range(doc.positionAt(c.closeOff), doc.positionAt(c.closeOff + 1)),
-                        CLOSE_CHARS[bracketIdx]
-                    );
+                    if (wasRemoved) {
+                        // Brackets were deleted: insert at content boundaries.
+                        // Content is at [openOff, closeOff-1) in the current document.
+                        editBuilder.insert(doc.positionAt(c.openOff), OPEN_CHARS[bracketIdx]);
+                        editBuilder.insert(doc.positionAt(c.closeOff - 1), CLOSE_CHARS[bracketIdx]);
+                    } else {
+                        editBuilder.replace(
+                            new vscode.Range(doc.positionAt(c.openOff), doc.positionAt(c.openOff + 1)),
+                            OPEN_CHARS[bracketIdx]
+                        );
+                        editBuilder.replace(
+                            new vscode.Range(doc.positionAt(c.closeOff), doc.positionAt(c.closeOff + 1)),
+                            CLOSE_CHARS[bracketIdx]
+                        );
+                    }
                 }
             }).then(success => {
                 if (success) {
-                    // Re-apply selections (to ensure they stay strictly inside)
+                    // After insert/replace, openOff and closeOff are canonical again
+                    if (state!.bracketsRemoved) {
+                        state!.bracketsRemoved = false;
+                    }
                     const newSelections = state!.cursorsData.map(c =>
                         new vscode.Selection(doc.positionAt(c.openOff + 1), doc.positionAt(c.closeOff))
                     );
@@ -1835,18 +1851,49 @@ export function activate(context: vscode.ExtensionContext) {
             });
         }
         else if (state.step === 6) {
-            // Step 6: Restore original brackets and original cursor/selection
+            // Step 6: Remove the brackets entirely
+            editor.edit(editBuilder => {
+                for (const c of state!.cursorsData) {
+                    // Delete open and close chars in a single transaction.
+                    // Specify ranges in the original (pre-edit) document.
+                    editBuilder.delete(new vscode.Range(doc.positionAt(c.openOff), doc.positionAt(c.openOff + 1)));
+                    editBuilder.delete(new vscode.Range(doc.positionAt(c.closeOff), doc.positionAt(c.closeOff + 1)));
+                }
+            }).then(success => {
+                if (success) {
+                    state!.bracketsRemoved = true;
+                    // After removing 2 chars, content is at [openOff, closeOff-1) in the new doc.
+                    const newSelections = state!.cursorsData.map(c =>
+                        new vscode.Selection(doc.positionAt(c.openOff), doc.positionAt(c.closeOff - 1))
+                    );
+                    editor.selections = newSelections;
+                    state!.lastAppliedSelections = newSelections.map(s => ({
+                        anchor: doc.offsetAt(s.anchor),
+                        active: doc.offsetAt(s.active)
+                    }));
+                    state!.step++;
+                }
+            });
+        }
+        else if (state.step === 7) {
+            // Step 7: Restore original brackets and original cursor/selection
             editor.edit(editBuilder => {
                 for (const c of state!.cursorsData) {
                     const bracketIdx = c.origIndex;
-                    editBuilder.replace(
-                        new vscode.Range(doc.positionAt(c.openOff), doc.positionAt(c.openOff + 1)),
-                        OPEN_CHARS[bracketIdx]
-                    );
-                    editBuilder.replace(
-                        new vscode.Range(doc.positionAt(c.closeOff), doc.positionAt(c.closeOff + 1)),
-                        CLOSE_CHARS[bracketIdx]
-                    );
+                    if (state!.bracketsRemoved) {
+                        // Brackets were deleted: insert them back
+                        editBuilder.insert(doc.positionAt(c.openOff), OPEN_CHARS[bracketIdx]);
+                        editBuilder.insert(doc.positionAt(c.closeOff - 1), CLOSE_CHARS[bracketIdx]);
+                    } else {
+                        editBuilder.replace(
+                            new vscode.Range(doc.positionAt(c.openOff), doc.positionAt(c.openOff + 1)),
+                            OPEN_CHARS[bracketIdx]
+                        );
+                        editBuilder.replace(
+                            new vscode.Range(doc.positionAt(c.closeOff), doc.positionAt(c.closeOff + 1)),
+                            CLOSE_CHARS[bracketIdx]
+                        );
+                    }
                 }
             }).then(success => {
                 if (success) {
