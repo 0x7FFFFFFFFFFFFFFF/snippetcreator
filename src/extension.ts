@@ -1214,6 +1214,8 @@ export function activate(context: vscode.ExtensionContext) {
 <div id="ops"></div>
 <div class="save-bar">
   <button class="primary" onclick="save()">Save All</button>
+  <button onclick="exportOps()">Export JSON…</button>
+  <button onclick="importOps()">Import JSON…</button>
   <span class="status" id="status"></span>
 </div>
 <script>
@@ -1354,6 +1356,31 @@ export function activate(context: vscode.ExtensionContext) {
     setStatus('Saved.');
   }
 
+  function exportOps() {
+    document.querySelectorAll('input[data-field]').forEach(el => update(el));
+    vscode.postMessage({ command: 'export', ops });
+  }
+
+  function importOps() {
+    vscode.postMessage({ command: 'import' });
+  }
+
+  // listen for replies from the extension host
+  window.addEventListener('message', event => {
+    const msg = event.data;
+    if (msg.command === 'imported') {
+      ops = msg.ops;
+      render();
+      setStatus(\`Imported. Total: \${ops.length} operations.\`);
+    } else if (msg.command === 'importError') {
+      setStatus('Import failed: ' + msg.error);
+    } else if (msg.command === 'exportDone') {
+      setStatus('Exported successfully.');
+    } else if (msg.command === 'exportError') {
+      setStatus('Export failed: ' + msg.error);
+    }
+  });
+
   // init
   renderNewRows();
   render();
@@ -1395,95 +1422,63 @@ export function activate(context: vscode.ExtensionContext) {
 </body>
 </html>`;
 
-        panel.webview.onDidReceiveMessage(msg => {
+        panel.webview.onDidReceiveMessage(async msg => {
             if (msg.command === 'save') {
                 replaceOperations = msg.ops;
                 saveReplaceOperations(context);
+            } else if (msg.command === 'export') {
+                // Export: show save dialog then write the file
+                const ops: ReplaceOperation[] = msg.ops;
+                if (ops.length === 0) {
+                    panel.webview.postMessage({ command: 'exportError', error: 'No operations to export.' });
+                    return;
+                }
+                const uri = await vscode.window.showSaveDialog({
+                    filters: { 'JSON': ['json'] },
+                    title: 'Export Replace Operations',
+                    defaultUri: vscode.Uri.file('replaceOperations.json')
+                });
+                if (!uri) return;
+                try {
+                    await vscode.workspace.fs.writeFile(uri, Buffer.from(JSON.stringify(ops, null, 2), 'utf8'));
+                    panel.webview.postMessage({ command: 'exportDone' });
+                } catch (error) {
+                    panel.webview.postMessage({ command: 'exportError', error: String(error) });
+                }
+            } else if (msg.command === 'import') {
+                // Import: show open dialog, read file, ask merge/replace, send result back
+                const uris = await vscode.window.showOpenDialog({
+                    canSelectMany: false,
+                    filters: { 'JSON': ['json'] },
+                    title: 'Import Replace Operations'
+                });
+                if (!uris || uris.length === 0) return;
+                try {
+                    const fileContent = await vscode.workspace.fs.readFile(uris[0]);
+                    const importedOps: ReplaceOperation[] = JSON.parse(fileContent.toString());
+                    if (!Array.isArray(importedOps)) throw new Error('Invalid format: expected an array');
+
+                    loadReplaceOperations(context);
+                    const choice = await vscode.window.showQuickPick(
+                        ['Merge (keep existing)', 'Replace (overwrite all)'],
+                        { placeHolder: 'How do you want to import?' }
+                    );
+                    if (!choice) return;
+
+                    if (choice.startsWith('Merge')) {
+                        const existingNames = new Set(replaceOperations.map(op => op.name));
+                        const newOps = importedOps.filter(op => !existingNames.has(op.name));
+                        replaceOperations = [...replaceOperations, ...newOps];
+                    } else {
+                        replaceOperations = importedOps;
+                    }
+                    saveReplaceOperations(context);
+                    panel.webview.postMessage({ command: 'imported', ops: replaceOperations });
+                } catch (error) {
+                    panel.webview.postMessage({ command: 'importError', error: String(error) });
+                }
             }
         }, undefined, context.subscriptions);
-    }));
-
-
-    // Export operations to a file
-    context.subscriptions.push(vscode.commands.registerCommand('snippetcreator.exportReplaceOperations', async () => {
-        loadReplaceOperations(context);
-
-        if (replaceOperations.length === 0) {
-            vscode.window.showInformationMessage("No replacement operations to export.");
-            return;
-        }
-
-        // Ask user where to save the file
-        const uri = await vscode.window.showSaveDialog({
-            filters: {
-                'JSON': ['json']
-            },
-            title: 'Export Replace Operations',
-            defaultUri: vscode.Uri.file('replaceOperations.json')
-        });
-
-        if (!uri) return;
-
-        try {
-            // Convert to JSON and write to file
-            const jsonData = JSON.stringify(replaceOperations, null, 2);
-            await vscode.workspace.fs.writeFile(uri, Buffer.from(jsonData, 'utf8'));
-            vscode.window.showInformationMessage(`Successfully exported ${replaceOperations.length} operations.`);
-        } catch (error) {
-            vscode.window.showErrorMessage(`Failed to export operations: ${error}`);
-        }
-    }));
-
-    // Import operations from a file
-    context.subscriptions.push(vscode.commands.registerCommand('snippetcreator.importReplaceOperations', async () => {
-        // Ask user to select the file
-        const uris = await vscode.window.showOpenDialog({
-            canSelectMany: false,
-            filters: {
-                'JSON': ['json']
-            },
-            title: 'Import Replace Operations'
-        });
-
-        if (!uris || uris.length === 0) return;
-
-        try {
-            // Read file content
-            const fileContent = await vscode.workspace.fs.readFile(uris[0]);
-            const importedOperations = JSON.parse(fileContent.toString());
-
-            // Validate the imported data
-            if (!Array.isArray(importedOperations)) {
-                throw new Error('Invalid format: expected an array of operations');
-            }
-
-            // Load current operations first
-            loadReplaceOperations(context);
-
-            // Ask how to handle the import
-            const choice = await vscode.window.showQuickPick(
-                ['Merge (keep existing operations)', 'Replace (overwrite all existing operations)'],
-                { placeHolder: 'How do you want to import the operations?' }
-            );
-
-            if (!choice) return;
-
-            if (choice.startsWith('Merge')) {
-                // For merge, we need to avoid duplicates (by name)
-                const existingNames = new Set(replaceOperations.map(op => op.name));
-                const newOperations = importedOperations.filter(op => !existingNames.has(op.name));
-                replaceOperations = [...replaceOperations, ...newOperations];
-            } else {
-                // For replace, just use the imported operations
-                replaceOperations = importedOperations;
-            }
-
-            // Save the updated operations
-            saveReplaceOperations(context);
-            vscode.window.showInformationMessage(`Successfully imported operations. Total: ${replaceOperations.length}`);
-        } catch (error) {
-            vscode.window.showErrorMessage(`Failed to import operations: ${error}`);
-        }
     }));
 
 

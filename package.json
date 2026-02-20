@@ -69,16 +69,6 @@
                 "category": "SnippetCreator"
             },
             {
-                "command": "snippetcreator.exportReplaceOperations",
-                "title": "Export Replace Operations",
-                "category": "SnippetCreator"
-            },
-            {
-                "command": "snippetcreator.importReplaceOperations",
-                "title": "Import Replace Operations",
-                "category": "SnippetCreator"
-            },
-            {
                 "command": "snippetcreator.highlightSelection",
                 "title": "Highlight Selected Text",
                 "category": "SnippetCreator"
