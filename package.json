@@ -2,7 +2,7 @@
     "name": "snippetcreator",
     "displayName": "Terry's Snippet Creator",
     "description": "",
-    "version": "2.0.0",
+    "version": "2.0.1",
     "engines": {
         "vscode": "^1.99.0"
     },
