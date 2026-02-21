@@ -104,6 +104,11 @@
                 "command": "snippetcreator.bracketSelect",
                 "title": "Bracket/Quote Select (Cycle)",
                 "category": "SnippetCreator"
+            },
+            {
+                "command": "snippetcreator.tagSelect",
+                "title": "HTML Tag Select (Cycle)",
+                "category": "SnippetCreator"
             }
         ],
         "keybindings": [
@@ -155,6 +160,11 @@
             {
                 "command": "snippetcreator.bracketSelect",
                 "key": "ctrl+q",
+                "when": "editorTextFocus"
+            },
+            {
+                "command": "snippetcreator.tagSelect",
+                "key": "alt+q",
                 "when": "editorTextFocus"
             }
         ],

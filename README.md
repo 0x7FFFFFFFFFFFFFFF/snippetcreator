@@ -109,6 +109,32 @@ Place your cursor inside any bracketed or quoted expression, then press `Ctrl+Q`
 
 Multiple cursors are supported: each cursor independently finds and cycles through the nearest brackets around it.
 
+### HTML Tag Select (`Alt+Q`)
+
+Cycle through HTML tag selection states surrounding the cursor, allowing you to select content, remove tags, or select the entire element.
+
+Place your cursor inside or near any HTML tag, then press `Alt+Q` repeatedly:
+
+| Press | Effect |
+|-------|--------|
+| x1 | Selects the text between the opening and closing HTML tags |
+| x2 | Removes the opening and closing tags entirely, keeping the inner text selected |
+| x3 | Restores the HTML tags and selects the entire HTML block (including the tags) |
+| x4 | Restores the original cursor position and clears the selection state |
+
+**Example** — starting with cursor at `|` inside `<div>C|ontent</div>`:
+
+```
+<div>Content</div>   (initial state)
+<div><Content></div> (x1 — selects "Content")
+<Content>            (x2 — removes tags)
+<<<div>Content</div>>> (x3 — restores tags and selects everything)
+...
+<div>C|ontent</div>  (x4 — restored)
+```
+
+This feature properly handles nested tags and automatically skips void elements (like `<img>`, `<br>`, `<input>`) when searching for the matching pairs. Multiple cursors are fully supported, securely managing offset changes even when editing elements of varying lengths!
+
 ## Getting Started
 
 1. Install the extension from the VS Code Marketplace
@@ -129,6 +155,7 @@ Multiple cursors are supported: each cursor independently finds and cycles throu
 | Save Current Snippet | `Ctrl+Shift+Z` |
 | Line Operations | `Alt+L` |
 | Bracket / Quote Select | `Ctrl+Q` |
+| HTML Tag Select | `Alt+Q` |
 
 Use the command palette for other features. In the command palette, type "SnippetCreator" to see all available commands.
 

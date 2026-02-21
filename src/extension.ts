@@ -1950,6 +1950,225 @@ export function activate(context: vscode.ExtensionContext) {
             });
         }
     }));
+    // ── HTML Tag Select (Alt+Q) ──────────────────────────────────────
+    // State per editor URI
+    interface TagSelectState {
+        originalSelections: readonly vscode.Selection[];
+        cursorsData: {
+            openTagStart: number;
+            openTagEnd: number;
+            closeTagStart: number;
+            closeTagEnd: number;
+            tagName: string;
+            originalOpenTag: string;
+            originalCloseTag: string;
+        }[];
+        step: number;
+        tagsRemoved: boolean;
+        lastAppliedSelections: { anchor: number; active: number }[];
+    }
+
+    const tagSelectStates = new Map<string, TagSelectState>();
+
+    const VOID_ELEMENTS = new Set([
+        'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input',
+        'link', 'meta', 'param', 'source', 'track', 'wbr'
+    ]);
+
+    function scanTagPair(
+        text: string,
+        startOffset: number
+    ): { openTagStart: number; openTagEnd: number; closeTagStart: number; closeTagEnd: number; tagName: string; originalOpenTag: string; originalCloseTag: string } | null {
+        let openTagMatch: RegExpMatchArray | null = null;
+        let stack: string[] = [];
+
+        const tagRegex = /<\s*(\/?)\s*([a-zA-Z0-9\-:]+)((?:[^>"']|"[^"]*"|'[^']*')*?)\s*(\/?)\s*>/g;
+
+        const tagsBefore: { match: RegExpMatchArray, index: number }[] = [];
+        let match;
+        while ((match = tagRegex.exec(text)) !== null) {
+            if (match.index >= startOffset) break;
+            tagsBefore.push({ match, index: match.index });
+        }
+
+        for (let i = tagsBefore.length - 1; i >= 0; i--) {
+            const m = tagsBefore[i].match;
+            const isClosing = m[1] === '/';
+            const tagName = m[2].toLowerCase();
+            const isSelfClosing = m[4] === '/' || VOID_ELEMENTS.has(tagName);
+
+            if (isSelfClosing && !isClosing) continue;
+
+            if (isClosing) {
+                stack.push(tagName);
+            } else {
+                if (stack.length > 0 && stack[stack.length - 1] === tagName) {
+                    stack.pop();
+                } else if (stack.length === 0) {
+                    openTagMatch = m;
+                    break;
+                }
+            }
+        }
+
+        if (!openTagMatch) return null;
+
+        const foundTagName = openTagMatch[2].toLowerCase();
+        const openTagStart = openTagMatch.index!;
+        const openTagEnd = openTagStart + openTagMatch[0].length;
+        const originalOpenTag = openTagMatch[0];
+
+        tagRegex.lastIndex = openTagEnd;
+        let depth = 0;
+        let closeTagMatch: RegExpMatchArray | null = null;
+        while ((match = tagRegex.exec(text)) !== null) {
+            const isClosing = match[1] === '/';
+            const tagName = match[2].toLowerCase();
+            const isSelfClosing = match[4] === '/' || VOID_ELEMENTS.has(tagName);
+
+            if (tagName !== foundTagName) continue;
+            if (isSelfClosing && !isClosing) continue;
+
+            if (!isClosing) {
+                depth++;
+            } else {
+                if (depth > 0) {
+                    depth--;
+                } else {
+                    closeTagMatch = match;
+                    break;
+                }
+            }
+        }
+
+        if (!closeTagMatch) return null;
+
+        return {
+            openTagStart,
+            openTagEnd,
+            closeTagStart: closeTagMatch.index!,
+            closeTagEnd: closeTagMatch.index! + closeTagMatch[0].length,
+            tagName: foundTagName,
+            originalOpenTag,
+            originalCloseTag: closeTagMatch[0]
+        };
+    }
+
+    context.subscriptions.push(vscode.commands.registerCommand('snippetcreator.tagSelect', () => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) return;
+
+        const doc = editor.document;
+        const text = doc.getText();
+        const editorId = doc.uri.toString();
+
+        const currentSelections = editor.selections;
+        let state = tagSelectStates.get(editorId);
+
+        const isContinuing = state !== undefined && selectionsMatch(editor, state.lastAppliedSelections);
+
+        if (!isContinuing) {
+            const cursorsData: TagSelectState['cursorsData'] = [];
+            for (const sel of currentSelections) {
+                const cursorOffset = doc.offsetAt(sel.start);
+                const pair = scanTagPair(text, cursorOffset);
+                if (pair) cursorsData.push(pair);
+            }
+
+            if (cursorsData.length === 0) return;
+
+            // Sort cursors to ensure deterministic offset calculation during edits
+            cursorsData.sort((a, b) => a.openTagStart - b.openTagStart);
+
+            state = {
+                originalSelections: currentSelections,
+                cursorsData,
+                step: 0,
+                tagsRemoved: false,
+                lastAppliedSelections: []
+            };
+            tagSelectStates.set(editorId, state);
+        }
+
+        if (!state) return;
+
+        if (state.step === 0) {
+            const newSelections = state.cursorsData.map(c =>
+                new vscode.Selection(doc.positionAt(c.openTagEnd), doc.positionAt(c.closeTagStart))
+            );
+            editor.selections = newSelections;
+            state.lastAppliedSelections = newSelections.map(s => ({
+                anchor: doc.offsetAt(s.anchor),
+                active: doc.offsetAt(s.active)
+            }));
+            state.step = 1;
+        }
+        else if (state.step === 1) {
+            editor.edit(editBuilder => {
+                for (const c of state!.cursorsData) {
+                    editBuilder.delete(new vscode.Range(doc.positionAt(c.openTagStart), doc.positionAt(c.openTagEnd)));
+                    editBuilder.delete(new vscode.Range(doc.positionAt(c.closeTagStart), doc.positionAt(c.closeTagEnd)));
+                }
+            }).then(success => {
+                if (success) {
+                    state!.tagsRemoved = true;
+                    let accumulatedDelta = 0;
+                    const newSelections = state!.cursorsData.map(c => {
+                        const openLen = c.openTagEnd - c.openTagStart;
+                        const closeLen = c.closeTagEnd - c.closeTagStart;
+
+                        const newStart = c.openTagStart + accumulatedDelta;
+                        accumulatedDelta -= openLen;
+                        const newEnd = c.closeTagStart + accumulatedDelta;
+                        accumulatedDelta -= closeLen;
+
+                        return new vscode.Selection(doc.positionAt(newStart), doc.positionAt(newEnd));
+                    });
+
+                    editor.selections = newSelections;
+                    state!.lastAppliedSelections = newSelections.map(s => ({
+                        anchor: doc.offsetAt(s.anchor),
+                        active: doc.offsetAt(s.active)
+                    }));
+                    state!.step++;
+                }
+            });
+        }
+        else if (state.step === 2) {
+            editor.edit(editBuilder => {
+                let accumulatedDelta = 0;
+                for (const c of state!.cursorsData) {
+                    const openLen = c.openTagEnd - c.openTagStart;
+                    const closeLen = c.closeTagEnd - c.closeTagStart;
+
+                    const newStart = c.openTagStart + accumulatedDelta;
+                    accumulatedDelta -= openLen;
+                    const newEnd = c.closeTagStart + accumulatedDelta;
+                    accumulatedDelta -= closeLen;
+
+                    editBuilder.insert(doc.positionAt(newStart), c.originalOpenTag);
+                    editBuilder.insert(doc.positionAt(newEnd), c.originalCloseTag);
+                }
+            }).then(success => {
+                if (success) {
+                    state!.tagsRemoved = false;
+                    const newSelections = state!.cursorsData.map(c =>
+                        new vscode.Selection(doc.positionAt(c.openTagStart), doc.positionAt(c.closeTagEnd))
+                    );
+                    editor.selections = newSelections;
+                    state!.lastAppliedSelections = newSelections.map(s => ({
+                        anchor: doc.offsetAt(s.anchor),
+                        active: doc.offsetAt(s.active)
+                    }));
+                    state!.step++;
+                }
+            });
+        }
+        else if (state.step === 3) {
+            editor.selections = [...state!.originalSelections];
+            tagSelectStates.delete(editorId);
+        }
+    }));
 }
 
 function writeToFile(folder: any, filename: any, content: any) {
