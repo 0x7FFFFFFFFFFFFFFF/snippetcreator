@@ -702,6 +702,7 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
             h.inSelection === entry.inSelection
         );
         if (existingIndex >= 0) {
+            entry.name = this.history[existingIndex].name;
             this.history.splice(existingIndex, 1);
         }
         this.history.unshift(entry);
