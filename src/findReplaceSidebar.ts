@@ -1331,7 +1331,7 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
         document.getElementById('findPrevious').addEventListener('click', function() { vscodeApi.postMessage({ type: 'findPrevious' }); });
         document.getElementById('findPrevious10').addEventListener('click', function() { vscodeApi.postMessage({ type: 'findPrevious10' }); });
         document.getElementById('findNext10').addEventListener('click', function() { vscodeApi.postMessage({ type: 'findNext10' }); });
-        document.getElementById('replaceOne').addEventListener('click', function() { vscodeApi.postMessage({ type: 'replaceOne' }); });
+        document.getElementById('replaceOne').addEventListener('click', function(e) { vscodeApi.postMessage({ type: e.ctrlKey ? 'findNext' : 'replaceOne' }); });
         document.getElementById('replaceOne10').addEventListener('click', function() { vscodeApi.postMessage({ type: 'replaceOne10' }); });
         document.getElementById('replaceAll').addEventListener('click', function() { vscodeApi.postMessage({ type: 'replaceAll' }); });
         document.getElementById('saveToHistory').addEventListener('click', function() { vscodeApi.postMessage({ type: 'saveToHistory' }); });
