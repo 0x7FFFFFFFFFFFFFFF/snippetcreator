@@ -74,6 +74,9 @@ Edit long search and replacement patterns in a full-height sidebar instead of th
 - Two large multi-line text boxes with wrapped content for both Find and Replace
 - Native-style controls for regex, match case, whole word, preserve case, and selection-only search
 - Quick actions for find next, find previous, replace, replace all, and syncing from the current editor selection
+- **Replace Current** modifier keys:
+  - `Ctrl+Click` — skip replacing; jump to the next match instead
+  - `Alt+Click` — replace the current match, select the replacement text, and stay at the current position
 
 ![Selection to cursors](https://raw.githubusercontent.com//0x7FFFFFFFFFFFFFFF/snippetcreator/main/images/selection_to_cursors.gif)
 ![Toggle between single line selection and cursor](https://raw.githubusercontent.com//0x7FFFFFFFFFFFFFFF/snippetcreator/main/images/toggle_single_line_selection_cursor.gif)

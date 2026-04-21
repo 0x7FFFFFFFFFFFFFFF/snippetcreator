@@ -196,6 +196,11 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
                 this.recordRecentTexts();
                 await this.replaceCurrentMatch();
                 break;
+            case 'replaceOneStay':
+                this.recordHistory();
+                this.recordRecentTexts();
+                await this.replaceCurrentMatch(true);
+                break;
             case 'replaceOne10':
                 this.recordHistory();
                 this.recordRecentTexts();
@@ -502,7 +507,7 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
         this.refreshMatches();
     }
 
-    private async replaceCurrentMatch(): Promise<void> {
+    private async replaceCurrentMatch(stayAtPosition = false): Promise<void> {
         const editor = this.getActiveEditor();
         if (!editor) {
             this.refreshMatches('No active editor is available.');
@@ -530,11 +535,19 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
 
         const selectedMatch = matches[selectedIndex];
         const replacement = this.resolveReplacement(selectedMatch, editor.document.getText(this.getSearchRange(editor)));
+        const replaceStart = selectedMatch.range.start;
         await editor.edit(editBuilder => {
             editBuilder.replace(selectedMatch.range, replacement);
         });
 
-        await this.selectAdjacentMatch(1);
+        if (stayAtPosition) {
+            const replaceEnd = editor.document.positionAt(editor.document.offsetAt(replaceStart) + replacement.length);
+            editor.selection = new vscode.Selection(replaceStart, replaceEnd);
+            editor.revealRange(new vscode.Range(replaceStart, replaceEnd), vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+            this.refreshMatches();
+        } else {
+            await this.selectAdjacentMatch(1);
+        }
     }
 
     private async replaceAllMatches(): Promise<void> {
@@ -1125,7 +1138,7 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
         <div class="status" id="status"></div>
         <div class="context-menu" id="contextMenu"></div>
 
-        <div class="hint">In History dropdown: <b>Ctrl+D</b> delete, <b>Ctrl+R</b> rename.<br>In Find/Replace input: <b>Esc</b> clear current input.</div>
+        <div class="hint">In History dropdown: <b>Ctrl+D</b> delete, <b>Ctrl+R</b> rename.<br>In Find/Replace input: <b>Esc</b> clear current input.<br>Replace Current: <b>Ctrl+Click</b> skip to next, <b>Alt+Click</b> replace &amp; stay.</div>
     </div>
 
     <script nonce="${nonce}">
@@ -1331,7 +1344,7 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
         document.getElementById('findPrevious').addEventListener('click', function() { vscodeApi.postMessage({ type: 'findPrevious' }); });
         document.getElementById('findPrevious10').addEventListener('click', function() { vscodeApi.postMessage({ type: 'findPrevious10' }); });
         document.getElementById('findNext10').addEventListener('click', function() { vscodeApi.postMessage({ type: 'findNext10' }); });
-        document.getElementById('replaceOne').addEventListener('click', function(e) { vscodeApi.postMessage({ type: e.ctrlKey ? 'findNext' : 'replaceOne' }); });
+        document.getElementById('replaceOne').addEventListener('click', function(e) { vscodeApi.postMessage({ type: e.ctrlKey ? 'findNext' : e.altKey ? 'replaceOneStay' : 'replaceOne' }); });
         document.getElementById('replaceOne10').addEventListener('click', function() { vscodeApi.postMessage({ type: 'replaceOne10' }); });
         document.getElementById('replaceAll').addEventListener('click', function() { vscodeApi.postMessage({ type: 'replaceAll' }); });
         document.getElementById('saveToHistory').addEventListener('click', function() { vscodeApi.postMessage({ type: 'saveToHistory' }); });
