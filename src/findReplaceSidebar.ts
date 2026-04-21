@@ -46,6 +46,7 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
     private readonly disposables: vscode.Disposable[] = [];
     private lastKnownTextEditor: vscode.TextEditor | undefined;
     private history: FindReplaceHistoryEntry[] = [];
+    private findInputFocused = false;
     private static readonly MAX_HISTORY = 50;
     private static readonly HISTORY_KEY = 'snippetcreator.findReplaceHistory';
     private state: FindReplaceViewState = {
@@ -115,13 +116,21 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
 
     public async toggleVisibility(): Promise<void> {
         if (this.view?.visible) {
-            await vscode.commands.executeCommand('workbench.action.closeSidebar');
+            if (this.findInputFocused) {
+                await vscode.commands.executeCommand('workbench.action.closeSidebar');
+            } else {
+                this.focusFindInput();
+            }
             return;
         }
 
         this.prefillFindFromSelection(true);
         await vscode.commands.executeCommand(`workbench.view.extension.${LargeFindReplaceViewProvider.containerId}`);
         this.view?.show(false);
+    }
+
+    public focusFindInput(): void {
+        this.view?.webview.postMessage({ type: 'focusFindInput' });
     }
 
     public dispose(): void {
@@ -185,6 +194,12 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
                     this.state = { ...this.state, ...message.payload };
                     this.refreshMatches();
                 }
+                break;
+            case 'findInputFocused':
+                this.findInputFocused = true;
+                break;
+            case 'findInputBlurred':
+                this.findInputFocused = false;
                 break;
             case 'saveToHistory': {
                 this.recordHistory();
@@ -1020,7 +1035,7 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
 
         <div class="status" id="status"></div>
 
-        <div class="hint">In History dropdown: <b>Ctrl+D</b> delete, <b>Ctrl+R</b> rename.</div>
+        <div class="hint">In History dropdown: <b>Ctrl+D</b> delete, <b>Ctrl+R</b> rename.<br>In Find/Replace input: <b>Esc</b> clear current input.</div>
     </div>
 
     <script nonce="${nonce}">
@@ -1198,6 +1213,24 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
             if (!dropdown.contains(e.target)) closeDropdown();
         });
 
+        findText.addEventListener('focus', function() { vscodeApi.postMessage({ type: 'findInputFocused' }); });
+        findText.addEventListener('blur', function() { vscodeApi.postMessage({ type: 'findInputBlurred' }); });
+
+        findText.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                findText.value = '';
+                pushState({ findText: '' });
+            }
+        });
+        replaceText.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                replaceText.value = '';
+                pushState({ replaceText: '' });
+            }
+        });
+
         findText.addEventListener('input', function() { pushState({ findText: findText.value }); });
         replaceText.addEventListener('input', function() { pushState({ replaceText: replaceText.value }); });
 
@@ -1286,6 +1319,9 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
                 state = event.data.payload;
                 vscodeApi.setState(state);
                 render();
+            }
+            if (event.data && event.data.type === 'focusFindInput') {
+                findText.focus();
             }
             if (event.data && event.data.type === 'history') {
                 historyList = event.data.payload || [];
