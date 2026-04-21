@@ -14,6 +14,16 @@ interface FindReplaceViewState {
     statusMessage: string;
 }
 
+interface FindReplaceHistoryEntry {
+    findText: string;
+    replaceText: string;
+    useRegex: boolean;
+    matchCase: boolean;
+    wholeWord: boolean;
+    preserveCase: boolean;
+    inSelection: boolean;
+}
+
 interface SearchMatch {
     range: vscode.Range;
     text: string;
@@ -33,6 +43,10 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
         border: '1px solid var(--vscode-editor-findMatchBorder)'
     });
     private readonly disposables: vscode.Disposable[] = [];
+    private lastKnownTextEditor: vscode.TextEditor | undefined;
+    private history: FindReplaceHistoryEntry[] = [];
+    private static readonly MAX_HISTORY = 50;
+    private static readonly HISTORY_KEY = 'snippetcreator.findReplaceHistory';
     private state: FindReplaceViewState = {
         findText: '',
         replaceText: '',
@@ -48,19 +62,24 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
     };
 
     constructor(private readonly context: vscode.ExtensionContext) {
+        this.lastKnownTextEditor = vscode.window.activeTextEditor;
+        this.history = this.context.globalState.get<FindReplaceHistoryEntry[]>(LargeFindReplaceViewProvider.HISTORY_KEY, []);
         this.disposables.push(
-            vscode.window.onDidChangeActiveTextEditor(() => {
+            vscode.window.onDidChangeActiveTextEditor(editor => {
+                if (editor) {
+                    this.lastKnownTextEditor = editor;
+                }
                 this.syncSelectionAvailability();
                 this.refreshMatches();
             }),
             vscode.window.onDidChangeTextEditorSelection(event => {
-                if (event.textEditor === vscode.window.activeTextEditor) {
+                if (event.textEditor === this.getActiveEditor()) {
                     this.syncSelectionAvailability();
                     this.refreshMatches();
                 }
             }),
             vscode.workspace.onDidChangeTextDocument(event => {
-                const activeEditor = vscode.window.activeTextEditor;
+                const activeEditor = this.getActiveEditor();
                 if (activeEditor && event.document === activeEditor.document) {
                     this.refreshMatches();
                 }
@@ -89,6 +108,7 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
 
         this.syncSelectionAvailability();
         this.postState();
+        this.postHistory();
         this.refreshMatches();
     }
 
@@ -117,6 +137,7 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
             case 'ready':
                 this.syncSelectionAvailability();
                 this.postState();
+                this.postHistory();
                 break;
             case 'updateState':
                 this.state = {
@@ -126,21 +147,43 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
                 };
                 this.refreshMatches();
                 break;
+            case 'findFirst':
+                this.recordHistory();
+                await this.selectFirstMatch();
+                break;
             case 'findNext':
+                this.recordHistory();
                 await this.selectAdjacentMatch(1);
                 break;
             case 'findPrevious':
+                this.recordHistory();
                 await this.selectAdjacentMatch(-1);
                 break;
+            case 'findPrevious10':
+                this.recordHistory();
+                for (let i = 0; i < 10; i++) { await this.selectAdjacentMatch(-1); }
+                break;
+            case 'findNext10':
+                this.recordHistory();
+                for (let i = 0; i < 10; i++) { await this.selectAdjacentMatch(1); }
+                break;
             case 'replaceOne':
+                this.recordHistory();
                 await this.replaceCurrentMatch();
                 break;
+            case 'replaceOne10':
+                this.recordHistory();
+                for (let i = 0; i < 10; i++) { await this.replaceCurrentMatch(); }
+                break;
             case 'replaceAll':
+                this.recordHistory();
                 await this.replaceAllMatches();
                 break;
-            case 'syncSelection':
-                this.prefillFindFromSelection(true);
-                this.refreshMatches();
+            case 'loadHistory':
+                if (message.payload) {
+                    this.state = { ...this.state, ...message.payload };
+                    this.refreshMatches();
+                }
                 break;
             default:
                 break;
@@ -148,7 +191,17 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
     }
 
     private getActiveEditor(): vscode.TextEditor | undefined {
-        return vscode.window.activeTextEditor;
+        const editor = vscode.window.activeTextEditor;
+        if (editor) {
+            this.lastKnownTextEditor = editor;
+            return editor;
+        }
+        // When the sidebar webview has focus, activeTextEditor may be undefined.
+        // Fall back to the last known text editor.
+        if (this.lastKnownTextEditor && !this.lastKnownTextEditor.document.isClosed) {
+            return this.lastKnownTextEditor;
+        }
+        return undefined;
     }
 
     private prefillFindFromSelection(force: boolean): void {
@@ -296,6 +349,32 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
         return matches.findIndex(match =>
             match.range.start.isEqual(selection.start) && match.range.end.isEqual(selection.end)
         );
+    }
+
+    private async selectFirstMatch(): Promise<void> {
+        const editor = this.getActiveEditor();
+        if (!editor) {
+            this.refreshMatches('No active editor is available.');
+            return;
+        }
+
+        let matches: SearchMatch[];
+        try {
+            matches = this.getMatches(editor);
+        } catch (error) {
+            this.refreshMatches(error instanceof Error ? error.message : String(error));
+            return;
+        }
+
+        if (matches.length === 0) {
+            this.refreshMatches('No matches found.');
+            return;
+        }
+
+        const match = matches[0];
+        editor.selection = new vscode.Selection(match.range.start, match.range.end);
+        editor.revealRange(match.range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+        this.refreshMatches();
     }
 
     private async selectAdjacentMatch(direction: 1 | -1): Promise<void> {
@@ -510,6 +589,46 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
         return replacement;
     }
 
+    private recordHistory(): void {
+        if (this.state.findText.length === 0) {
+            return;
+        }
+        const entry: FindReplaceHistoryEntry = {
+            findText: this.state.findText,
+            replaceText: this.state.replaceText,
+            useRegex: this.state.useRegex,
+            matchCase: this.state.matchCase,
+            wholeWord: this.state.wholeWord,
+            preserveCase: this.state.preserveCase,
+            inSelection: this.state.inSelection
+        };
+        const existingIndex = this.history.findIndex(h =>
+            h.findText === entry.findText &&
+            h.replaceText === entry.replaceText &&
+            h.useRegex === entry.useRegex &&
+            h.matchCase === entry.matchCase &&
+            h.wholeWord === entry.wholeWord &&
+            h.preserveCase === entry.preserveCase &&
+            h.inSelection === entry.inSelection
+        );
+        if (existingIndex >= 0) {
+            this.history.splice(existingIndex, 1);
+        }
+        this.history.unshift(entry);
+        if (this.history.length > LargeFindReplaceViewProvider.MAX_HISTORY) {
+            this.history.length = LargeFindReplaceViewProvider.MAX_HISTORY;
+        }
+        this.context.globalState.update(LargeFindReplaceViewProvider.HISTORY_KEY, this.history);
+        this.postHistory();
+    }
+
+    private postHistory(): void {
+        this.view?.webview.postMessage({
+            type: 'history',
+            payload: this.history
+        });
+    }
+
     private postState(): void {
         this.view?.webview.postMessage({
             type: 'state',
@@ -591,7 +710,8 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
             background: var(--vscode-input-background);
             color: var(--vscode-input-foreground);
             padding: 6px 8px;
-            font: inherit;
+            font-family: var(--vscode-editor-font-family, 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Source Code Pro', Menlo, Monaco, Consolas, 'Courier New', monospace);
+            font-size: var(--vscode-editor-font-size, inherit);
             line-height: 1.45;
             white-space: pre-wrap;
             overflow-wrap: anywhere;
@@ -648,21 +768,47 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
             transition: background 120ms ease, border-color 120ms ease, opacity 120ms ease;
         }
 
-        .action {
+        .action-find {
             background: var(--vscode-button-background);
             color: var(--vscode-button-foreground);
         }
 
-        .action:hover {
+        .action-find:hover {
             background: var(--vscode-button-hoverBackground);
         }
 
-        .secondary {
-            background: var(--vscode-button-secondaryBackground);
-            color: var(--vscode-button-secondaryForeground);
+        .action-find-x10 {
+            background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            opacity: 0.78;
         }
 
-        .action[disabled] {
+        .action-find-x10:hover {
+            background: var(--vscode-button-hoverBackground);
+            opacity: 1;
+        }
+
+        .action-replace {
+            background: #89513a;
+            color: #ffffff;
+        }
+
+        .action-replace:hover {
+            background: #a0624a;
+        }
+
+        .action-replace-x10 {
+            background: #89513a;
+            color: #ffffff;
+            opacity: 0.75;
+        }
+
+        .action-replace-x10:hover {
+            background: #a0624a;
+            opacity: 1;
+        }
+
+        button[disabled] {
             opacity: 0.5;
             cursor: not-allowed;
         }
@@ -677,6 +823,34 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
             min-height: 1.3rem;
             color: var(--vscode-descriptionForeground);
             font-size: 0.84rem;
+        }
+
+        .history-section {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .history-label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--vscode-descriptionForeground);
+        }
+
+        select {
+            width: 100%;
+            border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+            border-radius: 4px;
+            background: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            padding: 3px 6px;
+            font: inherit;
+            cursor: pointer;
+        }
+
+        select:focus {
+            outline: 1px solid var(--vscode-focusBorder);
+            outline-offset: 0;
         }
     </style>
 </head>
@@ -704,14 +878,23 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
         </div>
 
         <div class="toolbar">
-            <button class="action" id="findPrevious">Find Previous</button>
-            <button class="action" id="findNext">Find Next</button>
-            <button class="secondary" id="replaceOne">Replace</button>
-            <button class="secondary" id="replaceAll">Replace All</button>
-            <button class="secondary" id="syncSelection">Use Current Selection</button>
+            <button class="action-find" id="findFirst">Find First</button>
+            <button class="action-find" id="findPrevious">Find Previous</button>
+            <button class="action-find" id="findNext">Find Next</button>
+            <button class="action-find-x10" id="findPrevious10">Find Previous x10</button>
+            <button class="action-find-x10" id="findNext10">Find Next x10</button>
+        </div>
+        <div class="toolbar">
+            <button class="action-replace" id="replaceOne">Replace Current</button>
+            <button class="action-replace" id="replaceAll">Replace All</button>
+            <button class="action-replace-x10" id="replaceOne10">Replace Current x10</button>
         </div>
 
-        <div class="hint">Literal search is used whenever Regex is disabled. Replace supports multi-line text, wrapped display, and standard replacement escapes such as \\n and \\t.</div>
+        <div class="history-section">
+            <label class="history-label" for="historySelect">History</label>
+            <select id="historySelect"><option value="">-- No history --</option></select>
+        </div>
+
         <div class="status" id="status"></div>
     </div>
 
@@ -724,6 +907,8 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
         const replaceText = document.getElementById('replaceText');
         const counter = document.getElementById('counter');
         const status = document.getElementById('status');
+        const historySelect = document.getElementById('historySelect');
+        var historyList = [];
         const controls = {
             useRegex: document.getElementById('useRegex'),
             matchCase: document.getElementById('matchCase'),
@@ -784,14 +969,67 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
             pushState(partial);
         }
 
+        function truncateText(text, maxLen) {
+            if (!text) return '(empty)';
+            var s = text.replace(/\\n/g, ' ').replace(/\\r/g, '');
+            if (s.length > maxLen) return s.substring(0, maxLen) + '...';
+            return s;
+        }
+
+        function renderHistory() {
+            while (historySelect.options.length > 0) historySelect.remove(0);
+            if (historyList.length === 0) {
+                var opt = document.createElement('option');
+                opt.value = '';
+                opt.textContent = '-- No history --';
+                historySelect.appendChild(opt);
+                historySelect.disabled = true;
+                return;
+            }
+            historySelect.disabled = false;
+            var placeholder = document.createElement('option');
+            placeholder.value = '';
+            placeholder.textContent = '-- Select from history (' + historyList.length + ') --';
+            historySelect.appendChild(placeholder);
+            for (var i = 0; i < historyList.length; i++) {
+                var entry = historyList[i];
+                var opt = document.createElement('option');
+                opt.value = String(i);
+                var flags = [];
+                if (entry.useRegex) flags.push('Re');
+                if (entry.matchCase) flags.push('Cs');
+                if (entry.wholeWord) flags.push('Wd');
+                if (entry.preserveCase) flags.push('Pc');
+                if (entry.inSelection) flags.push('Sel');
+                var flagStr = flags.length > 0 ? ' [' + flags.join(',') + ']' : '';
+                opt.textContent = truncateText(entry.findText, 30) + ' -> ' + truncateText(entry.replaceText, 20) + flagStr;
+                historySelect.appendChild(opt);
+            }
+            historySelect.value = '';
+        }
+
+        historySelect.addEventListener('change', function() {
+            var idx = parseInt(historySelect.value, 10);
+            if (isNaN(idx) || idx < 0 || idx >= historyList.length) return;
+            var entry = historyList[idx];
+            state = Object.assign({}, state, entry);
+            vscodeApi.setState(state);
+            vscodeApi.postMessage({ type: 'loadHistory', payload: entry });
+            render();
+            historySelect.value = '';
+        });
+
         findText.addEventListener('input', function() { pushState({ findText: findText.value }); });
         replaceText.addEventListener('input', function() { pushState({ replaceText: replaceText.value }); });
 
+        document.getElementById('findFirst').addEventListener('click', function() { vscodeApi.postMessage({ type: 'findFirst' }); });
         document.getElementById('findNext').addEventListener('click', function() { vscodeApi.postMessage({ type: 'findNext' }); });
         document.getElementById('findPrevious').addEventListener('click', function() { vscodeApi.postMessage({ type: 'findPrevious' }); });
+        document.getElementById('findPrevious10').addEventListener('click', function() { vscodeApi.postMessage({ type: 'findPrevious10' }); });
+        document.getElementById('findNext10').addEventListener('click', function() { vscodeApi.postMessage({ type: 'findNext10' }); });
         document.getElementById('replaceOne').addEventListener('click', function() { vscodeApi.postMessage({ type: 'replaceOne' }); });
+        document.getElementById('replaceOne10').addEventListener('click', function() { vscodeApi.postMessage({ type: 'replaceOne10' }); });
         document.getElementById('replaceAll').addEventListener('click', function() { vscodeApi.postMessage({ type: 'replaceAll' }); });
-        document.getElementById('syncSelection').addEventListener('click', function() { vscodeApi.postMessage({ type: 'syncSelection' }); });
 
         controls.useRegex.addEventListener('change', function() { toggleOption('useRegex'); });
         controls.matchCase.addEventListener('change', function() { toggleOption('matchCase'); });
@@ -813,9 +1051,14 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
                 vscodeApi.setState(state);
                 render();
             }
+            if (event.data && event.data.type === 'history') {
+                historyList = event.data.payload || [];
+                renderHistory();
+            }
         });
 
         render();
+        renderHistory();
         vscodeApi.postMessage({ type: 'ready' });
     </script>
 </body>
