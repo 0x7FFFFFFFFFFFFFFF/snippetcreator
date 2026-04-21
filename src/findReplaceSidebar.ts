@@ -1040,11 +1040,29 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            font-family: var(--vscode-editor-font-family, 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Source Code Pro', Menlo, Monaco, Consolas, 'Courier New', monospace);
+            font-size: var(--vscode-editor-font-size, inherit);
         }
 
         .dropdown-item:hover,
         .dropdown-item.highlighted {
             background: var(--vscode-list-hoverBackground);
+        }
+
+        .history-name {
+            background: var(--vscode-badge-background);
+            color: var(--vscode-badge-foreground);
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-weight: 600;
+        }
+
+        .history-arrow {
+            color: #ffffff;
+            background: var(--vscode-textLink-foreground);
+            padding: 0 4px;
+            border-radius: 3px;
+            font-weight: bold;
         }
 
         .context-menu {
@@ -1279,9 +1297,23 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
                 if (entry.inSelection) flags.push('Sel');
                 var flagStr = flags.length > 0 ? ' [' + flags.join(',') + ']' : '';
                 if (entry.name) {
-                    item.textContent = entry.name + ': ' + truncateText(entry.findText, 30) + ' \u2192 ' + truncateText(entry.replaceText, 20) + flagStr;
+                    var nameSpan = document.createElement('span');
+                    nameSpan.className = 'history-name';
+                    nameSpan.textContent = entry.name;
+                    item.appendChild(nameSpan);
+                    item.appendChild(document.createTextNode(': ' + truncateText(entry.findText, 30) + ' '));
+                    var arrowSpan = document.createElement('span');
+                    arrowSpan.className = 'history-arrow';
+                    arrowSpan.textContent = '\u2192';
+                    item.appendChild(arrowSpan);
+                    item.appendChild(document.createTextNode(' ' + truncateText(entry.replaceText, 20) + flagStr));
                 } else {
-                    item.textContent = truncateText(entry.findText, 30) + ' -> ' + truncateText(entry.replaceText, 20) + flagStr;
+                    item.appendChild(document.createTextNode(truncateText(entry.findText, 30) + ' '));
+                    var arrowSpan2 = document.createElement('span');
+                    arrowSpan2.className = 'history-arrow';
+                    arrowSpan2.textContent = '\u2192';
+                    item.appendChild(arrowSpan2);
+                    item.appendChild(document.createTextNode(' ' + truncateText(entry.replaceText, 20) + flagStr));
                 }
                 historyListEl.appendChild(item);
             }
