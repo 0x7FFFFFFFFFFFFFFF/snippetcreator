@@ -22,6 +22,7 @@ interface FindReplaceHistoryEntry {
     wholeWord: boolean;
     preserveCase: boolean;
     inSelection: boolean;
+    name?: string;
 }
 
 interface SearchMatch {
@@ -185,6 +186,50 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
                     this.refreshMatches();
                 }
                 break;
+            case 'saveToHistory': {
+                this.recordHistory();
+                const findDisplay = this.state.findText.replace(/\n/g, ' ').replace(/\r/g, '');
+                const replaceDisplay = this.state.replaceText.replace(/\n/g, ' ').replace(/\r/g, '');
+                const defaultName = `${findDisplay} \u2192 ${replaceDisplay}`;
+                const name = await vscode.window.showInputBox({
+                    prompt: 'Enter an optional name for this history entry',
+                    value: defaultName,
+                    valueSelection: [0, defaultName.length]
+                });
+                if (name !== undefined && this.history.length > 0) {
+                    this.history[0].name = name || undefined;
+                    this.context.globalState.update(LargeFindReplaceViewProvider.HISTORY_KEY, this.history);
+                    this.postHistory();
+                }
+                break;
+            }
+            case 'renameHistory': {
+                const index = (message as any).payload?.index;
+                if (typeof index === 'number' && index >= 0 && index < this.history.length) {
+                    const entry = this.history[index];
+                    const currentName = entry.name || '';
+                    const renameResult = await vscode.window.showInputBox({
+                        prompt: 'Enter a name for this history entry',
+                        value: currentName,
+                        valueSelection: [0, currentName.length]
+                    });
+                    if (renameResult !== undefined) {
+                        entry.name = renameResult || undefined;
+                        this.context.globalState.update(LargeFindReplaceViewProvider.HISTORY_KEY, this.history);
+                        this.postHistory();
+                    }
+                }
+                break;
+            }
+            case 'deleteHistory': {
+                const deleteIndex = (message as any).payload?.index;
+                if (typeof deleteIndex === 'number' && deleteIndex >= 0 && deleteIndex < this.history.length) {
+                    this.history.splice(deleteIndex, 1);
+                    this.context.globalState.update(LargeFindReplaceViewProvider.HISTORY_KEY, this.history);
+                    this.postHistory();
+                }
+                break;
+            }
             default:
                 break;
         }
@@ -703,7 +748,7 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
 
         textarea {
             width: 100%;
-            min-height: 150px;
+            min-height: 120px;
             resize: vertical;
             border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
             border-radius: 4px;
@@ -808,6 +853,36 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
             opacity: 1;
         }
 
+        .action-save {
+            background: #2e7d32;
+            color: #ffffff;
+        }
+
+        .action-save:hover {
+            background: #388e3c;
+        }
+
+        .action-rename {
+            background: var(--vscode-button-secondaryBackground);
+            color: var(--vscode-button-secondaryForeground);
+            white-space: nowrap;
+        }
+
+        .action-rename:hover {
+            background: var(--vscode-button-secondaryHoverBackground);
+        }
+
+        .history-row {
+            display: flex;
+            gap: 4px;
+            align-items: center;
+        }
+
+        .history-row select {
+            flex: 1;
+            min-width: 0;
+        }
+
         button[disabled] {
             opacity: 0.5;
             cursor: not-allowed;
@@ -837,8 +912,15 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
             color: var(--vscode-descriptionForeground);
         }
 
-        select {
+        .custom-dropdown {
+            position: relative;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .dropdown-trigger {
             width: 100%;
+            text-align: left;
             border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
             border-radius: 4px;
             background: var(--vscode-input-background);
@@ -846,11 +928,46 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
             padding: 3px 6px;
             font: inherit;
             cursor: pointer;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
-        select:focus {
+        .dropdown-trigger:focus {
             outline: 1px solid var(--vscode-focusBorder);
             outline-offset: 0;
+        }
+
+        .dropdown-list {
+            display: none;
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 100%;
+            max-height: 300px;
+            overflow-y: auto;
+            background: var(--vscode-dropdown-background, var(--vscode-input-background));
+            border: 1px solid var(--vscode-dropdown-border, var(--vscode-input-border, var(--vscode-panel-border)));
+            border-radius: 4px;
+            z-index: 100;
+            margin-top: 2px;
+        }
+
+        .dropdown-list.open {
+            display: block;
+        }
+
+        .dropdown-item {
+            padding: 4px 8px;
+            cursor: pointer;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .dropdown-item:hover,
+        .dropdown-item.highlighted {
+            background: var(--vscode-list-hoverBackground);
         }
     </style>
 </head>
@@ -888,14 +1005,22 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
             <button class="action-replace" id="replaceOne">Replace Current</button>
             <button class="action-replace" id="replaceAll">Replace All</button>
             <button class="action-replace-x10" id="replaceOne10">Replace Current x10</button>
+            <button class="action-save" id="saveToHistory">Save</button>
         </div>
 
         <div class="history-section">
-            <label class="history-label" for="historySelect">History</label>
-            <select id="historySelect"><option value="">-- No history --</option></select>
+            <label class="history-label">History</label>
+            <div class="history-row">
+                <div class="custom-dropdown" id="historyDropdown">
+                    <button class="dropdown-trigger" id="historyTrigger" type="button">-- No history --</button>
+                    <div class="dropdown-list" id="historyListEl"></div>
+                </div>
+            </div>
         </div>
 
         <div class="status" id="status"></div>
+
+        <div class="hint">In History dropdown: <b>Ctrl+D</b> delete, <b>Ctrl+R</b> rename.</div>
     </div>
 
     <script nonce="${nonce}">
@@ -907,8 +1032,12 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
         const replaceText = document.getElementById('replaceText');
         const counter = document.getElementById('counter');
         const status = document.getElementById('status');
-        const historySelect = document.getElementById('historySelect');
+        const historyTrigger = document.getElementById('historyTrigger');
+        const historyListEl = document.getElementById('historyListEl');
         var historyList = [];
+        var dropdownOpen = false;
+        var highlightedIdx = -1;
+        var selectedHistoryIdx = -1;
         const controls = {
             useRegex: document.getElementById('useRegex'),
             matchCase: document.getElementById('matchCase'),
@@ -976,25 +1105,51 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
             return s;
         }
 
+        function openDropdown() {
+            if (historyList.length === 0) return;
+            historyListEl.classList.add('open');
+            dropdownOpen = true;
+            highlightedIdx = -1;
+        }
+
+        function closeDropdown() {
+            historyListEl.classList.remove('open');
+            dropdownOpen = false;
+            highlightedIdx = -1;
+            clearHighlight();
+        }
+
+        function clearHighlight() {
+            var items = historyListEl.querySelectorAll('.dropdown-item');
+            items.forEach(function(el) { el.classList.remove('highlighted'); });
+        }
+
+        function applyHighlight() {
+            var items = historyListEl.querySelectorAll('.dropdown-item');
+            items.forEach(function(el, i) {
+                if (i === highlightedIdx) el.classList.add('highlighted');
+                else el.classList.remove('highlighted');
+            });
+            if (highlightedIdx >= 0 && highlightedIdx < items.length) {
+                items[highlightedIdx].scrollIntoView({ block: 'nearest' });
+            }
+        }
+
         function renderHistory() {
-            while (historySelect.options.length > 0) historySelect.remove(0);
+            historyListEl.innerHTML = '';
             if (historyList.length === 0) {
-                var opt = document.createElement('option');
-                opt.value = '';
-                opt.textContent = '-- No history --';
-                historySelect.appendChild(opt);
-                historySelect.disabled = true;
+                historyTrigger.textContent = '-- No history --';
+                historyTrigger.disabled = true;
+                closeDropdown();
                 return;
             }
-            historySelect.disabled = false;
-            var placeholder = document.createElement('option');
-            placeholder.value = '';
-            placeholder.textContent = '-- Select from history (' + historyList.length + ') --';
-            historySelect.appendChild(placeholder);
+            historyTrigger.disabled = false;
+            historyTrigger.textContent = '-- Select from history (' + historyList.length + ') --';
             for (var i = 0; i < historyList.length; i++) {
                 var entry = historyList[i];
-                var opt = document.createElement('option');
-                opt.value = String(i);
+                var item = document.createElement('div');
+                item.className = 'dropdown-item';
+                item.dataset.index = String(i);
                 var flags = [];
                 if (entry.useRegex) flags.push('Re');
                 if (entry.matchCase) flags.push('Cs');
@@ -1002,21 +1157,45 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
                 if (entry.preserveCase) flags.push('Pc');
                 if (entry.inSelection) flags.push('Sel');
                 var flagStr = flags.length > 0 ? ' [' + flags.join(',') + ']' : '';
-                opt.textContent = truncateText(entry.findText, 30) + ' -> ' + truncateText(entry.replaceText, 20) + flagStr;
-                historySelect.appendChild(opt);
+                if (entry.name) {
+                    item.textContent = entry.name + ': ' + truncateText(entry.findText, 30) + ' \u2192 ' + truncateText(entry.replaceText, 20) + flagStr;
+                } else {
+                    item.textContent = truncateText(entry.findText, 30) + ' -> ' + truncateText(entry.replaceText, 20) + flagStr;
+                }
+                historyListEl.appendChild(item);
             }
-            historySelect.value = '';
         }
 
-        historySelect.addEventListener('change', function() {
-            var idx = parseInt(historySelect.value, 10);
+        historyTrigger.addEventListener('click', function() {
+            if (dropdownOpen) closeDropdown();
+            else openDropdown();
+        });
+
+        historyListEl.addEventListener('click', function(e) {
+            var item = e.target.closest('.dropdown-item');
+            if (!item) return;
+            var idx = parseInt(item.dataset.index, 10);
             if (isNaN(idx) || idx < 0 || idx >= historyList.length) return;
+            selectedHistoryIdx = idx;
             var entry = historyList[idx];
             state = Object.assign({}, state, entry);
             vscodeApi.setState(state);
             vscodeApi.postMessage({ type: 'loadHistory', payload: entry });
             render();
-            historySelect.value = '';
+            closeDropdown();
+        });
+
+        historyListEl.addEventListener('mousemove', function(e) {
+            var item = e.target.closest('.dropdown-item');
+            if (!item) return;
+            highlightedIdx = parseInt(item.dataset.index, 10);
+            applyHighlight();
+        });
+
+        document.addEventListener('click', function(e) {
+            if (!dropdownOpen) return;
+            var dropdown = document.getElementById('historyDropdown');
+            if (!dropdown.contains(e.target)) closeDropdown();
         });
 
         findText.addEventListener('input', function() { pushState({ findText: findText.value }); });
@@ -1030,6 +1209,60 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
         document.getElementById('replaceOne').addEventListener('click', function() { vscodeApi.postMessage({ type: 'replaceOne' }); });
         document.getElementById('replaceOne10').addEventListener('click', function() { vscodeApi.postMessage({ type: 'replaceOne10' }); });
         document.getElementById('replaceAll').addEventListener('click', function() { vscodeApi.postMessage({ type: 'replaceAll' }); });
+        document.getElementById('saveToHistory').addEventListener('click', function() { vscodeApi.postMessage({ type: 'saveToHistory' }); });
+
+        historyTrigger.addEventListener('keydown', function(e) {
+            if (!dropdownOpen) {
+                if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    openDropdown();
+                }
+                return;
+            }
+            handleDropdownKeydown(e);
+        });
+
+        function handleDropdownKeydown(e) {
+            var itemCount = historyList.length;
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                highlightedIdx = (highlightedIdx + 1) % itemCount;
+                applyHighlight();
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                highlightedIdx = highlightedIdx <= 0 ? itemCount - 1 : highlightedIdx - 1;
+                applyHighlight();
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (highlightedIdx >= 0 && highlightedIdx < itemCount) {
+                    selectedHistoryIdx = highlightedIdx;
+                    var entry = historyList[highlightedIdx];
+                    state = Object.assign({}, state, entry);
+                    vscodeApi.setState(state);
+                    vscodeApi.postMessage({ type: 'loadHistory', payload: entry });
+                    render();
+                    closeDropdown();
+                }
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                closeDropdown();
+            } else if (e.ctrlKey && (e.key === 'd' || e.key === 'D')) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (highlightedIdx < 0 || highlightedIdx >= itemCount) return;
+                var nextIdx = highlightedIdx < itemCount - 1 ? highlightedIdx : highlightedIdx - 1;
+                pendingHistoryReopen = true;
+                pendingHistoryIndex = nextIdx;
+                vscodeApi.postMessage({ type: 'deleteHistory', payload: { index: highlightedIdx } });
+            } else if (e.ctrlKey && (e.key === 'r' || e.key === 'R')) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (highlightedIdx < 0 || highlightedIdx >= itemCount) return;
+                pendingHistoryReopen = true;
+                pendingHistoryIndex = highlightedIdx;
+                vscodeApi.postMessage({ type: 'renameHistory', payload: { index: highlightedIdx } });
+            }
+        }
 
         controls.useRegex.addEventListener('change', function() { toggleOption('useRegex'); });
         controls.matchCase.addEventListener('change', function() { toggleOption('matchCase'); });
@@ -1045,6 +1278,9 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
             }
         });
 
+        var pendingHistoryReopen = false;
+        var pendingHistoryIndex = -1;
+
         window.addEventListener('message', function(event) {
             if (event.data && event.data.type === 'state') {
                 state = event.data.payload;
@@ -1054,6 +1290,16 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
             if (event.data && event.data.type === 'history') {
                 historyList = event.data.payload || [];
                 renderHistory();
+                if (pendingHistoryReopen && historyList.length > 0) {
+                    pendingHistoryReopen = false;
+                    highlightedIdx = pendingHistoryIndex >= 0 && pendingHistoryIndex < historyList.length ? pendingHistoryIndex : 0;
+                    pendingHistoryIndex = -1;
+                    openDropdown();
+                    applyHighlight();
+                } else {
+                    pendingHistoryReopen = false;
+                    pendingHistoryIndex = -1;
+                }
             }
         });
 
