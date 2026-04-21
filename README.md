@@ -69,6 +69,12 @@ Store and replay multiple text replacement operations:
 - Export and import operation lists to share with team members
 - Execute complex text transformations with a single command
 
+### Large Find and Replace Sidebar
+Edit long search and replacement patterns in a full-height sidebar instead of the compact floating widget:
+- Two large multi-line text boxes with wrapped content for both Find and Replace
+- Native-style controls for regex, match case, whole word, preserve case, and selection-only search
+- Quick actions for find next, find previous, replace, replace all, and syncing from the current editor selection
+
 ![Selection to cursors](https://raw.githubusercontent.com//0x7FFFFFFFFFFFFFFF/snippetcreator/main/images/selection_to_cursors.gif)
 ![Toggle between single line selection and cursor](https://raw.githubusercontent.com//0x7FFFFFFFFFFFFFFF/snippetcreator/main/images/toggle_single_line_selection_cursor.gif)
 
@@ -153,6 +159,7 @@ This feature properly handles nested tags and automatically skips void elements 
 | Add a tabstop | `Ctrl+Shift+X` |
 | Add a multi-choice tabstop | `Ctrl+Shift+Alt+X` |
 | Save Current Snippet | `Ctrl+Shift+Z` |
+| Toggle Large Find and Replace Sidebar | `Ctrl+Alt+F` |
 | Line Operations | `Alt+L` |
 | Bracket / Quote Select | `Ctrl+Q` |
 | HTML Tag Select | `Alt+Q` |

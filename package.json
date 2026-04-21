@@ -2,7 +2,7 @@
     "name": "snippetcreator",
     "displayName": "Terry's Snippet Creator",
     "description": "",
-    "version": "2.0.1",
+    "version": "2.1.0",
     "engines": {
         "vscode": "^1.99.0"
     },
@@ -24,10 +24,32 @@
         "snippets"
     ],
     "icon": "images/icon.png",
-    "activationEvents": [],
     "main": "./out/extension.js",
     "contributes": {
+        "viewsContainers": {
+            "activitybar": [
+                {
+                    "id": "snippetcreatorFindReplace",
+                    "title": "Find Replace",
+                    "icon": "images/find-replace.svg"
+                }
+            ]
+        },
+        "views": {
+            "snippetcreatorFindReplace": [
+                {
+                    "type": "webview",
+                    "id": "snippetcreator.findReplaceView",
+                    "name": "Find and Replace"
+                }
+            ]
+        },
         "commands": [
+            {
+                "command": "snippetcreator.toggleLargeFindReplaceSidebar",
+                "title": "Toggle Find and Replace Sidebar",
+                "category": "SnippetCreator"
+            },
             {
                 "command": "snippetcreator.replaceWithTabStopSyntax",
                 "title": "Replace selection with tab stop syntax like ${10:name}",
@@ -112,6 +134,10 @@
             }
         ],
         "keybindings": [
+            {
+                "command": "snippetcreator.toggleLargeFindReplaceSidebar",
+                "key": "ctrl+alt+f"
+            },
             {
                 "command": "snippetcreator.lineOperation",
                 "key": "alt+l",

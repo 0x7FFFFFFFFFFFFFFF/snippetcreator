@@ -1,6 +1,7 @@
 // The module 'vscode' contains the VS Code extensibility API
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
+import { LargeFindReplaceViewProvider } from './findReplaceSidebar';
 const parser = require('./parser');
 
 const fs = require('fs');
@@ -627,6 +628,23 @@ export function initializeHighlighting(context: vscode.ExtensionContext) {
 // your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
     console.log('Congratulations, snippetcreator is now active!');
+
+    const largeFindReplaceViewProvider = new LargeFindReplaceViewProvider(context);
+    context.subscriptions.push(
+        largeFindReplaceViewProvider,
+        vscode.window.registerWebviewViewProvider(
+            LargeFindReplaceViewProvider.viewType,
+            largeFindReplaceViewProvider,
+            {
+                webviewOptions: {
+                    retainContextWhenHidden: true
+                }
+            }
+        ),
+        vscode.commands.registerCommand('snippetcreator.toggleLargeFindReplaceSidebar', async () => {
+            await largeFindReplaceViewProvider.toggleVisibility();
+        })
+    );
 
     // Initialize highlighting functionality
     initializeHighlighting(context);
