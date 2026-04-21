@@ -47,8 +47,13 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
     private lastKnownTextEditor: vscode.TextEditor | undefined;
     private history: FindReplaceHistoryEntry[] = [];
     private findInputFocused = false;
+    private recentFinds: string[] = [];
+    private recentReplaces: string[] = [];
     private static readonly MAX_HISTORY = 50;
+    private static readonly MAX_RECENT = 20;
     private static readonly HISTORY_KEY = 'snippetcreator.findReplaceHistory';
+    private static readonly RECENT_FINDS_KEY = 'snippetcreator.recentFinds';
+    private static readonly RECENT_REPLACES_KEY = 'snippetcreator.recentReplaces';
     private state: FindReplaceViewState = {
         findText: '',
         replaceText: '',
@@ -66,6 +71,8 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
     constructor(private readonly context: vscode.ExtensionContext) {
         this.lastKnownTextEditor = vscode.window.activeTextEditor;
         this.history = this.context.globalState.get<FindReplaceHistoryEntry[]>(LargeFindReplaceViewProvider.HISTORY_KEY, []);
+        this.recentFinds = this.context.globalState.get<string[]>(LargeFindReplaceViewProvider.RECENT_FINDS_KEY, []);
+        this.recentReplaces = this.context.globalState.get<string[]>(LargeFindReplaceViewProvider.RECENT_REPLACES_KEY, []);
         this.disposables.push(
             vscode.window.onDidChangeActiveTextEditor(editor => {
                 if (editor) {
@@ -111,6 +118,7 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
         this.syncSelectionAvailability();
         this.postState();
         this.postHistory();
+        this.postRecentTexts();
         this.refreshMatches();
     }
 
@@ -148,6 +156,7 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
                 this.syncSelectionAvailability();
                 this.postState();
                 this.postHistory();
+                this.postRecentTexts();
                 break;
             case 'updateState':
                 this.state = {
@@ -159,34 +168,42 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
                 break;
             case 'findFirst':
                 this.recordHistory();
+                this.recordRecentTexts();
                 await this.selectFirstMatch();
                 break;
             case 'findNext':
                 this.recordHistory();
+                this.recordRecentTexts();
                 await this.selectAdjacentMatch(1);
                 break;
             case 'findPrevious':
                 this.recordHistory();
+                this.recordRecentTexts();
                 await this.selectAdjacentMatch(-1);
                 break;
             case 'findPrevious10':
                 this.recordHistory();
+                this.recordRecentTexts();
                 for (let i = 0; i < 10; i++) { await this.selectAdjacentMatch(-1); }
                 break;
             case 'findNext10':
                 this.recordHistory();
+                this.recordRecentTexts();
                 for (let i = 0; i < 10; i++) { await this.selectAdjacentMatch(1); }
                 break;
             case 'replaceOne':
                 this.recordHistory();
+                this.recordRecentTexts();
                 await this.replaceCurrentMatch();
                 break;
             case 'replaceOne10':
                 this.recordHistory();
+                this.recordRecentTexts();
                 for (let i = 0; i < 10; i++) { await this.replaceCurrentMatch(); }
                 break;
             case 'replaceAll':
                 this.recordHistory();
+                this.recordRecentTexts();
                 await this.replaceAllMatches();
                 break;
             case 'loadHistory':
@@ -682,6 +699,37 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
         this.postHistory();
     }
 
+    private recordRecentTexts(): void {
+        const findText = this.state.findText;
+        if (findText.length > 0) {
+            const idx = this.recentFinds.indexOf(findText);
+            if (idx >= 0) { this.recentFinds.splice(idx, 1); }
+            this.recentFinds.unshift(findText);
+            if (this.recentFinds.length > LargeFindReplaceViewProvider.MAX_RECENT) {
+                this.recentFinds.length = LargeFindReplaceViewProvider.MAX_RECENT;
+            }
+            this.context.globalState.update(LargeFindReplaceViewProvider.RECENT_FINDS_KEY, this.recentFinds);
+        }
+        const replaceText = this.state.replaceText;
+        if (replaceText.length > 0) {
+            const idx = this.recentReplaces.indexOf(replaceText);
+            if (idx >= 0) { this.recentReplaces.splice(idx, 1); }
+            this.recentReplaces.unshift(replaceText);
+            if (this.recentReplaces.length > LargeFindReplaceViewProvider.MAX_RECENT) {
+                this.recentReplaces.length = LargeFindReplaceViewProvider.MAX_RECENT;
+            }
+            this.context.globalState.update(LargeFindReplaceViewProvider.RECENT_REPLACES_KEY, this.recentReplaces);
+        }
+        this.postRecentTexts();
+    }
+
+    private postRecentTexts(): void {
+        this.view?.webview.postMessage({
+            type: 'recentTexts',
+            payload: { finds: this.recentFinds, replaces: this.recentReplaces }
+        });
+    }
+
     private postHistory(): void {
         this.view?.webview.postMessage({
             type: 'history',
@@ -984,6 +1032,47 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
         .dropdown-item.highlighted {
             background: var(--vscode-list-hoverBackground);
         }
+
+        .context-menu {
+            display: none;
+            position: fixed;
+            max-height: 300px;
+            min-width: 180px;
+            max-width: 400px;
+            overflow-y: auto;
+            background: var(--vscode-dropdown-background, var(--vscode-input-background));
+            border: 1px solid var(--vscode-dropdown-border, var(--vscode-input-border, var(--vscode-panel-border)));
+            border-radius: 4px;
+            z-index: 200;
+            padding: 2px 0;
+        }
+
+        .context-menu.open {
+            display: block;
+        }
+
+        .context-menu-item {
+            padding: 4px 10px;
+            cursor: pointer;
+            white-space: pre-wrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-family: var(--vscode-editor-font-family, monospace);
+            font-size: var(--vscode-editor-font-size, inherit);
+            max-height: 3.2em;
+            line-height: 1.45;
+        }
+
+        .context-menu-item:hover {
+            background: var(--vscode-list-hoverBackground);
+        }
+
+        .context-menu-empty {
+            padding: 4px 10px;
+            color: var(--vscode-descriptionForeground);
+            font-style: italic;
+            font-size: 0.86rem;
+        }
     </style>
 </head>
 <body>
@@ -1034,6 +1123,7 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
         </div>
 
         <div class="status" id="status"></div>
+        <div class="context-menu" id="contextMenu"></div>
 
         <div class="hint">In History dropdown: <b>Ctrl+D</b> delete, <b>Ctrl+R</b> rename.<br>In Find/Replace input: <b>Esc</b> clear current input.</div>
     </div>
@@ -1050,6 +1140,8 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
         const historyTrigger = document.getElementById('historyTrigger');
         const historyListEl = document.getElementById('historyListEl');
         var historyList = [];
+        var recentFinds = [];
+        var recentReplaces = [];
         var dropdownOpen = false;
         var highlightedIdx = -1;
         var selectedHistoryIdx = -1;
@@ -1323,6 +1415,10 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
             if (event.data && event.data.type === 'focusFindInput') {
                 findText.focus();
             }
+            if (event.data && event.data.type === 'recentTexts') {
+                recentFinds = event.data.payload.finds || [];
+                recentReplaces = event.data.payload.replaces || [];
+            }
             if (event.data && event.data.type === 'history') {
                 historyList = event.data.payload || [];
                 renderHistory();
@@ -1336,6 +1432,83 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
                     pendingHistoryReopen = false;
                     pendingHistoryIndex = -1;
                 }
+            }
+        });
+
+        var contextMenuEl = document.getElementById('contextMenu');
+        var contextMenuTarget = null;
+
+        function showContextMenu(targetTextarea, items, x, y) {
+            contextMenuTarget = targetTextarea;
+            contextMenuEl.innerHTML = '';
+            if (items.length === 0) {
+                var empty = document.createElement('div');
+                empty.className = 'context-menu-empty';
+                empty.textContent = 'No recent entries';
+                contextMenuEl.appendChild(empty);
+            } else {
+                for (var i = 0; i < items.length; i++) {
+                    var item = document.createElement('div');
+                    item.className = 'context-menu-item';
+                    item.dataset.index = String(i);
+                    var display = items[i].length > 80 ? items[i].substring(0, 80) + '...' : items[i];
+                    item.textContent = display;
+                    item.title = items[i];
+                    contextMenuEl.appendChild(item);
+                }
+            }
+            contextMenuEl.style.left = x + 'px';
+            contextMenuEl.style.top = y + 'px';
+            contextMenuEl.classList.add('open');
+            var rect = contextMenuEl.getBoundingClientRect();
+            if (rect.bottom > window.innerHeight) {
+                contextMenuEl.style.top = Math.max(0, window.innerHeight - rect.height) + 'px';
+            }
+            if (rect.right > window.innerWidth) {
+                contextMenuEl.style.left = Math.max(0, window.innerWidth - rect.width) + 'px';
+            }
+        }
+
+        function closeContextMenu() {
+            contextMenuEl.classList.remove('open');
+            contextMenuTarget = null;
+        }
+
+        findText.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+            showContextMenu(findText, recentFinds, e.clientX, e.clientY);
+        });
+
+        replaceText.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+            showContextMenu(replaceText, recentReplaces, e.clientX, e.clientY);
+        });
+
+        contextMenuEl.addEventListener('click', function(e) {
+            var item = e.target.closest('.context-menu-item');
+            if (!item || !contextMenuTarget) return;
+            var idx = parseInt(item.dataset.index, 10);
+            var items = contextMenuTarget === findText ? recentFinds : recentReplaces;
+            if (isNaN(idx) || idx < 0 || idx >= items.length) return;
+            contextMenuTarget.value = items[idx];
+            if (contextMenuTarget === findText) {
+                pushState({ findText: items[idx] });
+            } else {
+                pushState({ replaceText: items[idx] });
+            }
+            contextMenuTarget.focus();
+            closeContextMenu();
+        });
+
+        document.addEventListener('click', function(e) {
+            if (!contextMenuEl.contains(e.target)) {
+                closeContextMenu();
+            }
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeContextMenu();
             }
         });
 
