@@ -12,6 +12,7 @@ interface FindReplaceViewState {
     activeMatch: number;
     canUseSelection: boolean;
     statusMessage: string;
+    regexFlagsInfo: string;
 }
 
 interface FindReplaceHistoryEntry {
@@ -65,7 +66,8 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
         matchCount: 0,
         activeMatch: 0,
         canUseSelection: false,
-        statusMessage: ''
+        statusMessage: '',
+        regexFlagsInfo: ''
     };
 
     constructor(private readonly context: vscode.ExtensionContext) {
@@ -313,6 +315,13 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
     }
 
     private refreshMatches(statusMessage?: string): void {
+        if (this.state.useRegex && this.state.findText.length > 0) {
+            const parsed = this.parseInlineRegexFlags(this.state.findText);
+            this.state.regexFlagsInfo = parsed.descriptions.join(', ');
+        } else {
+            this.state.regexFlagsInfo = '';
+        }
+
         const editor = this.getActiveEditor();
         if (!editor || this.state.findText.length === 0) {
             this.state.matchCount = 0;
@@ -397,9 +406,44 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
     }
 
     private createSearchRegExp(): RegExp {
-        const sourceText = this.state.useRegex ? this.state.findText : this.escapeRegExp(this.state.findText);
-        const wrappedSource = this.state.wholeWord ? this.wrapWholeWord(sourceText) : sourceText;
-        const flags = `g${this.state.matchCase ? '' : 'i'}m`;
+        return this.buildRegexFromState(true);
+    }
+
+    private createSingleMatchRegExp(): RegExp {
+        return this.buildRegexFromState(false);
+    }
+
+    private buildRegexFromState(global: boolean): RegExp {
+        let sourceText = this.state.useRegex ? this.state.findText : this.escapeRegExp(this.state.findText);
+        let flags = global ? 'g' : '';
+        let findTextForWordCheck = this.state.findText;
+
+        if (this.state.useRegex) {
+            const parsed = this.parseInlineRegexFlags(sourceText);
+            sourceText = parsed.cleanPattern;
+            findTextForWordCheck = parsed.cleanPattern;
+
+            if (parsed.flagOverrides.i !== undefined) {
+                if (parsed.flagOverrides.i) { flags += 'i'; }
+            } else if (!this.state.matchCase) {
+                flags += 'i';
+            }
+
+            if (parsed.flagOverrides.s !== undefined) {
+                if (parsed.flagOverrides.s) { flags += 's'; }
+            }
+
+            if (parsed.flagOverrides.m !== undefined) {
+                if (parsed.flagOverrides.m) { flags += 'm'; }
+            } else {
+                flags += 'm';
+            }
+        } else {
+            if (!this.state.matchCase) { flags += 'i'; }
+            flags += 'm';
+        }
+
+        const wrappedSource = this.state.wholeWord ? this.wrapWholeWord(sourceText, findTextForWordCheck) : sourceText;
 
         try {
             return new RegExp(wrappedSource, flags);
@@ -408,16 +452,51 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
         }
     }
 
-    private createSingleMatchRegExp(): RegExp {
-        const sourceText = this.state.useRegex ? this.state.findText : this.escapeRegExp(this.state.findText);
-        const wrappedSource = this.state.wholeWord ? this.wrapWholeWord(sourceText) : sourceText;
-        const flags = `${this.state.matchCase ? '' : 'i'}m`;
-        return new RegExp(wrappedSource, flags);
+    private parseInlineRegexFlags(pattern: string): { cleanPattern: string; flagOverrides: { i?: boolean; s?: boolean; m?: boolean }; descriptions: string[] } {
+        const match = pattern.match(/^\(\?(-?[ism])+\)/);
+        if (!match) {
+            return { cleanPattern: pattern, flagOverrides: {}, descriptions: [] };
+        }
+
+        const flagStr = match[0].slice(2, -1);
+        const flagOverrides: { i?: boolean; s?: boolean; m?: boolean } = {};
+        const descriptions: string[] = [];
+
+        let idx = 0;
+        while (idx < flagStr.length) {
+            let negate = false;
+            if (flagStr[idx] === '-') {
+                negate = true;
+                idx++;
+            }
+            if (idx < flagStr.length) {
+                const flag = flagStr[idx] as 'i' | 's' | 'm';
+                switch (flag) {
+                    case 'i':
+                        flagOverrides.i = !negate;
+                        descriptions.push(negate ? 'case sensitive' : 'case insensitive');
+                        break;
+                    case 's':
+                        flagOverrides.s = !negate;
+                        descriptions.push(negate ? "dot doesn't match line breaks" : 'dot matches line breaks');
+                        break;
+                    case 'm':
+                        flagOverrides.m = !negate;
+                        descriptions.push(negate ? '^$ match at string start/end' : '^$ match at line breaks');
+                        break;
+                }
+                idx++;
+            }
+        }
+
+        const cleanPattern = pattern.slice(match[0].length);
+        return { cleanPattern, flagOverrides, descriptions };
     }
 
-    private wrapWholeWord(source: string): string {
-        const startsWithWord = /^\w/.test(this.state.findText);
-        const endsWithWord = /\w$/.test(this.state.findText);
+    private wrapWholeWord(source: string, findTextForCheck?: string): string {
+        const checkText = findTextForCheck ?? this.state.findText;
+        const startsWithWord = /^\w/.test(checkText);
+        const endsWithWord = /\w$/.test(checkText);
         const prefix = startsWithWord ? '\\b' : '';
         const suffix = endsWithWord ? '\\b' : '';
         return `${prefix}(?:${source})${suffix}`;
@@ -977,6 +1056,19 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
             font-size: 0.84rem;
         }
 
+        .regex-flags-info {
+            font-size: 0.76rem;
+            color: var(--vscode-textLink-foreground);
+            line-height: 1.3;
+            padding: 0 2px;
+            margin-top: -6px;
+            display: none;
+        }
+
+        .regex-flags-info.visible {
+            display: block;
+        }
+
         .history-section {
             display: flex;
             flex-direction: column;
@@ -1117,6 +1209,7 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
         <div class="field">
             <textarea id="findText" wrap="soft" spellcheck="false" placeholder="Find"></textarea>
         </div>
+        <div id="regexFlagsInfo" class="regex-flags-info"></div>
 
         <div class="field">
             <textarea id="replaceText" wrap="soft" spellcheck="false" placeholder="Replace"></textarea>
@@ -1169,6 +1262,7 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
         const replaceText = document.getElementById('replaceText');
         const counter = document.getElementById('counter');
         const status = document.getElementById('status');
+        const regexFlagsInfo = document.getElementById('regexFlagsInfo');
         const historyTrigger = document.getElementById('historyTrigger');
         const historyListEl = document.getElementById('historyListEl');
         var historyList = [];
@@ -1225,6 +1319,14 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
             }
 
             status.textContent = state.statusMessage || '';
+
+            if (state.regexFlagsInfo) {
+                regexFlagsInfo.textContent = state.regexFlagsInfo;
+                regexFlagsInfo.classList.add('visible');
+            } else {
+                regexFlagsInfo.textContent = '';
+                regexFlagsInfo.classList.remove('visible');
+            }
         }
 
         function toggleOption(key) {
