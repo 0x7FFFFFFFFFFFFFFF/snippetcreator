@@ -2,7 +2,7 @@
     "name": "snippetcreator",
     "displayName": "Terry's Snippet Creator",
     "description": "",
-    "version": "3.1.0",
+    "version": "3.2.0",
     "engines": {
         "vscode": "^1.99.0"
     },
@@ -136,7 +136,7 @@
         "keybindings": [
             {
                 "command": "snippetcreator.toggleLargeFindReplaceSidebar",
-                "key": "ctrl+f"
+                "key": "ctrl+alt+f"
             },
             {
                 "command": "snippetcreator.lineOperation",

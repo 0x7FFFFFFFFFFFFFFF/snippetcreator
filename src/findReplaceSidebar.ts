@@ -48,6 +48,7 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
     private lastKnownTextEditor: vscode.TextEditor | undefined;
     private history: FindReplaceHistoryEntry[] = [];
     private findInputFocused = false;
+    private pendingFocusFindInput = false;
     private recentFinds: string[] = [];
     private recentReplaces: string[] = [];
     private static readonly MAX_HISTORY = 50;
@@ -110,6 +111,10 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
                 if (webviewView.visible) {
                     this.prefillFindFromSelection(false);
                     this.refreshMatches();
+                    if (this.pendingFocusFindInput) {
+                        this.pendingFocusFindInput = false;
+                        this.focusFindInput();
+                    }
                 }
             }),
             webviewView.webview.onDidReceiveMessage(async message => {
@@ -134,6 +139,7 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
             return;
         }
 
+        this.pendingFocusFindInput = true;
         this.prefillFindFromSelection(true);
         await vscode.commands.executeCommand(`workbench.view.extension.${LargeFindReplaceViewProvider.containerId}`);
         this.view?.show(false);
@@ -159,6 +165,10 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
                 this.postState();
                 this.postHistory();
                 this.postRecentTexts();
+                if (this.pendingFocusFindInput) {
+                    this.pendingFocusFindInput = false;
+                    this.focusFindInput();
+                }
                 break;
             case 'updateState':
                 this.state = {
@@ -1250,7 +1260,7 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
         <div class="status" id="status"></div>
         <div class="context-menu" id="contextMenu"></div>
 
-        <div class="hint">In History dropdown: <b>Ctrl+D</b> delete, <b>Ctrl+R</b> rename.<br>In Find/Replace input: <b>Esc</b> clear current input.<br>Replace Current: <b>Ctrl+Click</b> skip to next, <b>Alt+Click</b> replace &amp; stay.</div>
+        <div class="hint">In History dropdown: <b>Ctrl+D</b> delete, <b>Ctrl+R</b> rename.<br>In Find/Replace input: <b>Esc</b> clear current input, <b>Enter</b> Find Next, <b>Shift+Enter</b> newline.<br>Replace Current: <b>Ctrl+Click</b> skip to next, <b>Alt+Click</b> replace &amp; stay.</div>
     </div>
 
     <script nonce="${nonce}">
@@ -1461,6 +1471,9 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
                 e.preventDefault();
                 findText.value = '';
                 pushState({ findText: '' });
+            } else if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                vscodeApi.postMessage({ type: 'findNext' });
             }
         });
         replaceText.addEventListener('keydown', function(e) {
@@ -1468,6 +1481,9 @@ export class LargeFindReplaceViewProvider implements vscode.WebviewViewProvider,
                 e.preventDefault();
                 replaceText.value = '';
                 pushState({ replaceText: '' });
+            } else if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                vscodeApi.postMessage({ type: 'findNext' });
             }
         });
 

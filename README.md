@@ -74,6 +74,11 @@ Edit long search and replacement patterns in a full-height sidebar instead of th
 - Two large multi-line text boxes with wrapped content for both Find and Replace
 - Native-style controls for regex, match case, whole word, preserve case, and selection-only search
 - Quick actions for find next, find previous, replace, replace all, and syncing from the current editor selection
+- Opening the panel (`Ctrl+Alt+F`) automatically places focus in the Search field so you can start typing immediately
+- **Keyboard shortcuts in Find / Replace fields:**
+  - `Enter` — trigger Find Next
+  - `Shift+Enter` — insert a newline in the input
+  - `Esc` — clear the current input field
 - **Replace Current** modifier keys:
   - `Ctrl+Click` — skip replacing; jump to the next match instead
   - `Alt+Click` — replace the current match, select the replacement text, and stay at the current position
